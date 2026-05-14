@@ -79,3 +79,146 @@ h1 {
 .muted {
     color: #5e6f82;
 }
+
+.chat-shell {
+    max-width: 1100px;
+}
+
+.chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.ghost-link {
+    text-decoration: none;
+    color: #0f4fa8;
+    border: 1px solid #cfe0ff;
+    background: #f5f9ff;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 14px;
+}
+
+.chat-panel {
+    display: grid;
+    grid-template-columns: 1.4fr 0.9fr;
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.chat-log,
+.trace-log {
+    min-height: 420px;
+    max-height: 520px;
+    overflow: auto;
+    border: 1px solid #d9e3f0;
+    border-radius: 16px;
+    background: #f8fbff;
+    padding: 16px;
+}
+
+.chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bubble {
+    max-width: 90%;
+    padding: 12px 14px;
+    border-radius: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.bubble.user {
+    align-self: flex-end;
+    background: #0068d6;
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+.bubble.assistant {
+    align-self: flex-start;
+    background: #ffffff;
+    border: 1px solid #dce7f6;
+    border-bottom-left-radius: 4px;
+}
+
+.trace-log h2 {
+    margin-top: 0;
+}
+
+.trace-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.trace-item {
+    border-radius: 12px;
+    padding: 10px 12px;
+    border: 1px solid #d9e3f0;
+    background: #fff;
+}
+
+.trace-item pre {
+    margin: 6px 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: "Consolas", "SFMono-Regular", monospace;
+    font-size: 12px;
+}
+
+.trace-thinking {
+    border-left: 4px solid #4a8cff;
+}
+
+.trace-tool_call {
+    border-left: 4px solid #ff9f43;
+}
+
+.trace-tool_result {
+    border-left: 4px solid #2ecc71;
+}
+
+.trace-done {
+    border-left: 4px solid #8e44ad;
+}
+
+.trace-error {
+    border-left: 4px solid #e74c3c;
+}
+
+.chat-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.chat-form input {
+    border: 1px solid #cfd8e3;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 16px;
+}
+
+.chat-form button {
+    border: none;
+    border-radius: 10px;
+    padding: 0 24px;
+    background: #0f6ce0;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+@media (max-width: 900px) {
+    .chat-panel {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>On-Call Assistant - Phase 3 Agent</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<main class="container chat-shell">
+    <div class="chat-header">
+        <div>
+            <h1>On-Call Assistant / Phase 3</h1>
+            <p class="muted">Agent 对话 + readFile tool trace</p>
+        </div>
+        <a class="ghost-link" href="/v1">v1</a>
+        <a class="ghost-link" href="/v2">v2</a>
+    </div>
+
+    <section class="chat-panel">
+        <div id="chatLog" class="chat-log">
+            <div class="bubble assistant">
+                请输入 On-Call 问题，我会自动读取相关 SOP 并展示 tool_call / tool_result。
+            </div>
+        </div>
+
+        <div id="traceLog" class="trace-log">
+            <h2>Tool Trace</h2>
+            <div id="traceItems" class="trace-items"></div>
+        </div>
+    </section>
+
+    <form id="chatForm" class="chat-form">
+        <input id="messageInput" type="text" th:value="${message}" placeholder="例如：服务 OOM 了怎么办？" autocomplete="off"/>
+        <button type="submit">Send</button>
+    </form>
+</main>
+
+<script>
+    const chatForm = document.getElementById("chatForm");
+    const messageInput = document.getElementById("messageInput");
+    const chatLog = document.getElementById("chatLog");
+    const traceItems = document.getElementById("traceItems");
+    let currentEventSource = null;
+
+    function escapeHtml(value) {
+        return (value || "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+    }
+
+    function appendBubble(role, text) {
+        const node = document.createElement("div");
+        node.className = `bubble ${role}`;
+        node.innerHTML = escapeHtml(text);
+        chatLog.appendChild(node);
+        chatLog.scrollTop = chatLog.scrollHeight;
+        return node;
+    }
+
+    function appendTrace(type, text) {
+        const node = document.createElement("div");
+        node.className = `trace-item trace-${type}`;
+        node.innerHTML = `<strong>${escapeHtml(type)}</strong><pre>${escapeHtml(text)}</pre>`;
+        traceItems.appendChild(node);
+        traceItems.scrollTop = traceItems.scrollHeight;
+    }
+
+    function resetTrace() {
+        traceItems.innerHTML = "";
+    }
+
+    function startChat(message) {
+        const q = (message || "").trim();
+        if (!q) {
+            return;
+        }
+        if (currentEventSource) {
+            currentEventSource.close();
+        }
+        appendBubble("user", q);
+        resetTrace();
+
+        const botBubble = appendBubble("assistant", "正在分析问题...");
+        currentEventSource = new EventSource(`/v3/chat?message=${encodeURIComponent(q)}`);
+
+        currentEventSource.addEventListener("thinking", (e) => {
+            botBubble.textContent = e.data;
+            appendTrace("thinking", e.data);
+        });
+        currentEventSource.addEventListener("tool_call", (e) => {
+            appendTrace("tool_call", e.data);
+        });
+        currentEventSource.addEventListener("tool_result", (e) => {
+            appendTrace("tool_result", e.data);
+        });
+        currentEventSource.addEventListener("message", (e) => {
+            botBubble.textContent = e.data;
+        });
+        currentEventSource.addEventListener("done", (e) => {
+            appendTrace("done", e.data);
+            currentEventSource.close();
+        });
+        currentEventSource.addEventListener("error", () => {
+            botBubble.textContent = "Agent 对话失败，请重试。";
+            currentEventSource.close();
+        });
+    }
+
+    chatForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        startChat(messageInput.value);
+    });
+
+    if (messageInput.value && messageInput.value.trim()) {
+        startChat(messageInput.value);
+    }
+</script>
+</body>
+</html>
+
