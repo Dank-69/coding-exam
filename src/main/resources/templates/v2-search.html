@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>On-Call Assistant - Phase 2 Semantic Search</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<main class="container">
+    <h1>On-Call Assistant / Phase 2</h1>
+    <form method="get" action="/v2" class="search-form" id="searchForm">
+        <input type="text" name="q" id="queryInput" th:value="${query}" placeholder="Try: 服务器挂了 / 黑客攻击 / 机器学习模型出问题"/>
+        <button type="submit">Search</button>
+    </form>
+
+    <p id="apiHint" class="api-hint muted">Ready</p>
+
+    <section class="results" id="resultsSection">
+        <h2>Results</h2>
+        <p class="muted" id="emptyHint">Input query and click Search</p>
+        <div id="resultList"></div>
+    </section>
+</main>
+
+<script>
+    const form = document.getElementById("searchForm");
+    const queryInput = document.getElementById("queryInput");
+    const apiHint = document.getElementById("apiHint");
+    const emptyHint = document.getElementById("emptyHint");
+    const resultList = document.getElementById("resultList");
+
+    function escapeHtml(value) {
+        return value
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+    }
+
+    function renderResults(results) {
+        resultList.innerHTML = "";
+        if (!results || results.length === 0) {
+            emptyHint.style.display = "block";
+            emptyHint.textContent = "No results";
+            return;
+        }
+        emptyHint.style.display = "none";
+
+        results.forEach((item) => {
+            const card = document.createElement("article");
+            card.className = "result-card";
+            card.innerHTML = `
+                <h3>${escapeHtml(item.id)} - ${escapeHtml(item.title)}</h3>
+                <p>${escapeHtml(item.snippet || "")}</p>
+                <p class="score">score: ${item.score}</p>
+            `;
+            resultList.appendChild(card);
+        });
+    }
+
+    async function doSearch(query) {
+        const q = (query || "").trim();
+        if (!q) {
+            apiHint.textContent = "Please input a query";
+            resultList.innerHTML = "";
+            emptyHint.style.display = "block";
+            emptyHint.textContent = "Input query and click Search";
+            return;
+        }
+
+        const url = `/v2/search?q=${encodeURIComponent(q)}`;
+        apiHint.textContent = `Calling API: GET ${url}`;
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            apiHint.textContent = `Done: GET ${url} | took=${data.took}ms | results=${(data.results || []).length}`;
+            renderResults(data.results || []);
+            history.replaceState(null, "", `/v2?q=${encodeURIComponent(q)}`);
+        } catch (err) {
+            apiHint.textContent = `Failed: GET ${url} | ${err.message}`;
+            resultList.innerHTML = "";
+            emptyHint.style.display = "block";
+            emptyHint.textContent = "Search failed, please retry";
+        }
+    }
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        doSearch(queryInput.value);
+    });
+
+    if (queryInput.value && queryInput.value.trim()) {
+        doSearch(queryInput.value);
+    }
+</script>
+</body>
+</html>
+

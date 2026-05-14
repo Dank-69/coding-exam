@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>On-Call 助手 - Phase 1 搜索</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<main class="container">
+    <h1>On-Call 助手 / Phase 1</h1>
+    <form method="get" action="/v1" class="search-form" id="searchForm">
+        <input type="text" name="q" id="queryInput" th:value="${query}" placeholder="输入关键词，例如 OOM、故障、CDN、&"/>
+        <button type="submit">搜索</button>
+    </form>
+
+    <p id="apiHint" class="api-hint muted">等待搜索...</p>
+
+    <section class="results" id="resultsSection">
+        <h2>搜索结果</h2>
+        <p class="muted" id="emptyHint">请先输入关键词并搜索</p>
+        <div id="resultList"></div>
+    </section>
+</main>
+
+<script>
+    const form = document.getElementById("searchForm");
+    const queryInput = document.getElementById("queryInput");
+    const apiHint = document.getElementById("apiHint");
+    const emptyHint = document.getElementById("emptyHint");
+    const resultList = document.getElementById("resultList");
+
+    function escapeHtml(value) {
+        return value
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+    }
+
+    function renderResults(results) {
+        resultList.innerHTML = "";
+        if (!results || results.length === 0) {
+            emptyHint.style.display = "block";
+            emptyHint.textContent = "无结果";
+            return;
+        }
+        emptyHint.style.display = "none";
+
+        results.forEach((item) => {
+            const card = document.createElement("article");
+            card.className = "result-card";
+            card.innerHTML = `
+                <h3>${escapeHtml(item.id)} · ${escapeHtml(item.title)}</h3>
+                <p>${escapeHtml(item.snippet || "")}</p>
+                <p class="score">score: ${item.score}</p>
+            `;
+            resultList.appendChild(card);
+        });
+    }
+
+    async function doSearch(query) {
+        const q = (query || "").trim();
+        if (!q) {
+            apiHint.textContent = "请输入关键词后再搜索";
+            resultList.innerHTML = "";
+            emptyHint.style.display = "block";
+            emptyHint.textContent = "请先输入关键词并搜索";
+            return;
+        }
+
+        const url = `/v1/search?q=${encodeURIComponent(q)}`;
+        apiHint.textContent = `正在调用接口：GET ${url}`;
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            apiHint.textContent = `接口调用成功：GET ${url} | took=${data.took}ms | results=${(data.results || []).length}`;
+            renderResults(data.results || []);
+            history.replaceState(null, "", `/v1?q=${encodeURIComponent(q)}`);
+        } catch (err) {
+            apiHint.textContent = `接口调用失败：GET ${url} | ${err.message}`;
+            resultList.innerHTML = "";
+            emptyHint.style.display = "block";
+            emptyHint.textContent = "查询失败，请稍后重试";
+        }
+    }
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        doSearch(queryInput.value);
+    });
+
+    if (queryInput.value && queryInput.value.trim()) {
+        doSearch(queryInput.value);
+    }
+</script>
+</body>
+</html>
