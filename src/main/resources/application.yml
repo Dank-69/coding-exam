@@ -4,3 +4,29 @@ server:
 spring:
   thymeleaf:
     cache: false
+
+moonshot:
+  provider: ${AI_PROVIDER:moonshot}
+  base-url: ${AI_BASE_URL:${MOONSHOT_BASE_URL:https://api.moonshot.cn/v1}}
+  api-key: ${MOONSHOT_API_KEY:}
+  embedding-provider: ${AI_EMBEDDING_PROVIDER:aliyun}
+  embedding-base-url: ${AI_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+  embedding-api-key: ${AI_EMBEDDING_API_KEY:}
+  embedding-model: ${AI_EMBEDDING_MODEL:text-embedding-v3}
+  chat-model: ${AI_CHAT_MODEL:${MOONSHOT_CHAT_MODEL:moonshot-v1-8k}}
+  embeddings-enabled: ${AI_EMBEDDINGS_ENABLED:true}
+  request-timeout-seconds: ${AI_TIMEOUT_SECONDS:${MOONSHOT_TIMEOUT_SECONDS:20}}
+  max-tool-rounds: ${AI_MAX_TOOL_ROUNDS:${MOONSHOT_MAX_TOOL_ROUNDS:4}}
+
+logging:
+  level:
+    root: INFO
+    com.oncall: INFO
+
+oncall:
+  bootstrap:
+    enabled: ${ONCALL_BOOTSTRAP_ENABLED:true}
+    data-dir: ${ONCALL_BOOTSTRAP_DATA_DIR:data}
+  phase2:
+    vector-warmup:
+      enabled: ${ONCALL_V2_VECTOR_WARMUP_ENABLED:false}

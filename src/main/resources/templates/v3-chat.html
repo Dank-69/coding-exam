@@ -3,37 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>On-Call Assistant - Phase 3 Agent</title>
+    <title>Phase 3 Agent | On-Call Assistant</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-<main class="container chat-shell">
-    <div class="chat-header">
-        <div>
-            <h1>On-Call Assistant / Phase 3</h1>
-            <p class="muted">Agent 对话 + readFile tool trace</p>
-        </div>
-        <a class="ghost-link" href="/v1">v1</a>
-        <a class="ghost-link" href="/v2">v2</a>
-    </div>
+<header class="topbar">
+    <a class="brand" href="/">
+        <span class="brand-mark">OC</span>
+        <span>On-Call Assistant</span>
+    </a>
+    <nav class="phase-nav" aria-label="阶段导航">
+        <a class="nav-link" href="/v1">v1 搜索</a>
+        <a class="nav-link" href="/v2">v2 语义</a>
+        <a class="nav-link active" href="/v3">v3 Agent</a>
+    </nav>
+</header>
 
-    <section class="chat-panel">
-        <div id="chatLog" class="chat-log">
-            <div class="bubble assistant">
-                请输入 On-Call 问题，我会自动读取相关 SOP 并展示 tool_call / tool_result。
+<main class="page-shell">
+    <section class="workbench">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Phase 3</p>
+                <h1>On-Call Agent</h1>
+                <p class="section-copy">通过对话定位 SOP，实时展示 readFile 工具调用和工具返回结果。</p>
             </div>
-        </div>
-
-        <div id="traceLog" class="trace-log">
-            <h2>Tool Trace</h2>
-            <div id="traceItems" class="trace-items"></div>
+            <a class="secondary-action" href="/">返回主界面</a>
         </div>
     </section>
 
-    <form id="chatForm" class="chat-form">
-        <input id="messageInput" type="text" th:value="${message}" placeholder="例如：服务 OOM 了怎么办？" autocomplete="off"/>
-        <button type="submit">Send</button>
-    </form>
+    <section class="agent-layout">
+        <div class="panel chat-panel">
+            <div class="panel-header">
+                <h2>对话</h2>
+                <span id="streamState" class="counter">idle</span>
+            </div>
+            <div id="chatLog" class="chat-log">
+                <div class="bubble assistant">
+                    输入 On-Call 问题后，我会定位相关 SOP 并展示 tool_call / tool_result。
+                </div>
+            </div>
+            <form id="chatForm" class="chat-form">
+                <label class="input-wrap compact" for="messageInput">
+                    <span>问题</span>
+                    <input id="messageInput" type="text" th:value="${message}" placeholder="例如：js 文件不见了、测试环境全挂了、模型效果下降" autocomplete="off">
+                </label>
+                <button class="primary-action" type="submit">发送</button>
+            </form>
+        </div>
+
+        <aside class="panel trace-panel">
+            <div class="panel-header">
+                <h2>工具调用链</h2>
+                <span class="counter">trace</span>
+            </div>
+            <div id="traceItems" class="trace-items">
+                <p class="empty-state">等待 Agent 调用工具。</p>
+            </div>
+        </aside>
+    </section>
 </main>
 
 <script>
@@ -41,10 +68,11 @@
     const messageInput = document.getElementById("messageInput");
     const chatLog = document.getElementById("chatLog");
     const traceItems = document.getElementById("traceItems");
+    const streamState = document.getElementById("streamState");
     let currentEventSource = null;
 
     function escapeHtml(value) {
-        return (value || "")
+        return String(value || "")
             .replaceAll("&", "&amp;")
             .replaceAll("<", "&lt;")
             .replaceAll(">", "&gt;")
@@ -62,6 +90,9 @@
     }
 
     function appendTrace(type, text) {
+        if (traceItems.querySelector(".empty-state")) {
+            traceItems.innerHTML = "";
+        }
         const node = document.createElement("div");
         node.className = `trace-item trace-${type}`;
         node.innerHTML = `<strong>${escapeHtml(type)}</strong><pre>${escapeHtml(text)}</pre>`;
@@ -70,7 +101,7 @@
     }
 
     function resetTrace() {
-        traceItems.innerHTML = "";
+        traceItems.innerHTML = '<p class="empty-state">正在等待工具调用。</p>';
     }
 
     function startChat(message) {
@@ -83,35 +114,45 @@
         }
         appendBubble("user", q);
         resetTrace();
+        streamState.textContent = "streaming";
+        const answerLines = [];
 
         const botBubble = appendBubble("assistant", "正在分析问题...");
         currentEventSource = new EventSource(`/v3/chat?message=${encodeURIComponent(q)}`);
 
-        currentEventSource.addEventListener("thinking", (e) => {
-            botBubble.textContent = e.data;
-            appendTrace("thinking", e.data);
+        currentEventSource.addEventListener("thinking", (event) => {
+            botBubble.textContent = event.data;
+            appendTrace("thinking", event.data);
         });
-        currentEventSource.addEventListener("tool_call", (e) => {
-            appendTrace("tool_call", e.data);
+        currentEventSource.addEventListener("tool_call", (event) => {
+            appendTrace("tool_call", event.data);
         });
-        currentEventSource.addEventListener("tool_result", (e) => {
-            appendTrace("tool_result", e.data);
+        currentEventSource.addEventListener("tool_result", (event) => {
+            appendTrace("tool_result", event.data);
         });
-        currentEventSource.addEventListener("message", (e) => {
-            botBubble.textContent = e.data;
+        currentEventSource.addEventListener("message", (event) => {
+            answerLines.push(event.data);
+            botBubble.textContent = answerLines.join("\n");
         });
-        currentEventSource.addEventListener("done", (e) => {
-            appendTrace("done", e.data);
+        currentEventSource.addEventListener("done", (event) => {
+            appendTrace("done", event.data);
+            streamState.textContent = "done";
             currentEventSource.close();
+            currentEventSource = null;
         });
-        currentEventSource.addEventListener("error", () => {
-            botBubble.textContent = "Agent 对话失败，请重试。";
-            currentEventSource.close();
+        currentEventSource.addEventListener("error", (event) => {
+            appendTrace("error", event.data || "stream error");
+            botBubble.textContent = event.data || "Agent 对话失败，请重试。";
+            streamState.textContent = "error";
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+            }
         });
     }
 
-    chatForm.addEventListener("submit", (e) => {
-        e.preventDefault();
+    chatForm.addEventListener("submit", (event) => {
+        event.preventDefault();
         startChat(messageInput.value);
     });
 
@@ -121,4 +162,3 @@
 </script>
 </body>
 </html>
-

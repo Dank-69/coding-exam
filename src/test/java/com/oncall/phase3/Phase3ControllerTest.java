@@ -3,6 +3,7 @@ package com.oncall.phase3;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oncall.phase1.dto.UploadDocumentRequest;
+import com.oncall.phase3.service.ReadFileTool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -26,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "moonshot.api-key=")
 @AutoConfigureMockMvc
 class Phase3ControllerTest {
 
@@ -35,6 +37,9 @@ class Phase3ControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ReadFileTool readFileTool;
 
     @BeforeEach
     void uploadDocuments() throws Exception {
@@ -79,6 +84,24 @@ class Phase3ControllerTest {
     }
 
     @Test
+    void localFallbackAnswer_shouldIncludeGroundedSopContent() throws Exception {
+        JsonNode root = chatJson("OOM");
+        assertThat(root.path("answer").asText())
+                .contains("sop-001")
+                .contains("OutOfMemoryError");
+    }
+
+    @Test
+    void readFile_shouldRejectWildcardFilename() {
+        assertThatThrownBy(() -> readFileTool.readFile("sop-*.html"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plain file name");
+        assertThatThrownBy(() -> readFileTool.readFile("sop-001?.html"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plain file name");
+    }
+
+    @Test
     void p0Question_shouldStreamTrace() throws Exception {
         MvcResult result = mockMvc.perform(get("/v3/chat").queryParam("message", "P0 故障的响应流程是什么？"))
                 .andExpect(request().asyncStarted())
@@ -99,4 +122,3 @@ class Phase3ControllerTest {
         return objectMapper.readTree(result.getResponse().getContentAsString());
     }
 }
-

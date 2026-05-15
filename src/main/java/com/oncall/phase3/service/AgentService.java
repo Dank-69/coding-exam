@@ -1,96 +1,314 @@
 package com.oncall.phase3.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oncall.common.config.MoonshotProperties;
+import com.oncall.common.exception.ExternalServiceException;
 import com.oncall.common.util.HtmlParser;
-import com.oncall.common.util.TextTokenizer;
 import com.oncall.phase1.model.DocumentEntity;
 import com.oncall.phase1.model.SearchResult;
 import com.oncall.phase1.service.KeywordSearchService;
 import com.oncall.phase1.store.DocumentRepository;
 import com.oncall.phase2.service.SemanticSearchService;
+import com.oncall.phase3.client.MoonshotChatClient;
 import com.oncall.phase3.model.AgentChatResponse;
 import com.oncall.phase3.model.AgentMessage;
 import com.oncall.phase3.model.AgentToolCall;
 import com.oncall.phase3.model.AgentTraceEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Service
 public class AgentService {
+    private static final Logger log = LoggerFactory.getLogger(AgentService.class);
+    private static final String SYSTEM_PROMPT_TEMPLATE = """
+            You are an On-Call incident response assistant.
+            You MUST ground your answer in SOP files by calling the readFile tool when needed.
+
+            Available SOP files (exact filename required):
+            %s
+
+            Rules:
+            1) Use the exact filename from the list above — never guess filenames.
+            2) Prefer concrete action steps and escalation path.
+            3) If uncertainty exists, explicitly say what to verify.
+            4) Keep response concise, structured, and practical.
+            5) Never claim to read a file unless tool call succeeded.
+            """;
+
+    private String buildSystemPrompt() {
+        java.util.Collection<DocumentEntity> docs = documentRepository.findAll();
+        if (docs.isEmpty()) {
+            return SYSTEM_PROMPT_TEMPLATE.formatted("  (no SOP documents loaded — ask user to upload data first)");
+        }
+        StringBuilder listing = new StringBuilder();
+        for (DocumentEntity doc : docs) {
+            listing.append("  - ").append(doc.id()).append(".html: ").append(doc.title()).append("\n");
+        }
+        return SYSTEM_PROMPT_TEMPLATE.formatted(listing.toString());
+    }
+
+    private final MoonshotChatClient moonshotChatClient;
     private final SemanticSearchService semanticSearchService;
     private final KeywordSearchService keywordSearchService;
     private final DocumentRepository documentRepository;
     private final ReadFileTool readFileTool;
     private final HtmlParser htmlParser;
-    private final TextTokenizer tokenizer;
+    private final ObjectMapper objectMapper;
+    private final MoonshotProperties moonshotProperties;
 
     public AgentService(
+            MoonshotChatClient moonshotChatClient,
             SemanticSearchService semanticSearchService,
             KeywordSearchService keywordSearchService,
             DocumentRepository documentRepository,
             ReadFileTool readFileTool,
             HtmlParser htmlParser,
-            TextTokenizer tokenizer
+            ObjectMapper objectMapper,
+            MoonshotProperties moonshotProperties
     ) {
+        this.moonshotChatClient = moonshotChatClient;
         this.semanticSearchService = semanticSearchService;
         this.keywordSearchService = keywordSearchService;
         this.documentRepository = documentRepository;
         this.readFileTool = readFileTool;
         this.htmlParser = htmlParser;
-        this.tokenizer = tokenizer;
+        this.objectMapper = objectMapper;
+        this.moonshotProperties = moonshotProperties;
     }
 
     public AgentChatResponse chat(String message, List<AgentMessage> history, Consumer<AgentTraceEvent> tracer) {
+        long start = System.currentTimeMillis();
         String query = message == null ? "" : message.trim();
         if (query.isBlank()) {
             throw new IllegalArgumentException("message is required");
         }
+        int historySize = history == null ? 0 : history.size();
+        boolean apiEnabled = moonshotChatClient.isEnabled();
+        log.info("v3 agent chat start q='{}' history={} apiEnabled={} provider={} model={}",
+                logMessage(query), historySize, apiEnabled, moonshotProperties.providerName(), moonshotProperties.chatModel());
         Consumer<AgentTraceEvent> sink = tracer == null ? event -> { } : tracer;
-
         sink.accept(new AgentTraceEvent("thinking", "正在分析问题并定位相关 SOP..."));
 
+        if (!apiEnabled) {
+            String reason = "chat API key missing";
+            log.warn("v3 agent chat mode=fallback reason='{}' provider={} q='{}'",
+                    reason, moonshotProperties.providerName(), logMessage(query));
+            AgentChatResponse response = localFallbackChat(query, history, sink);
+            log.info("v3 agent chat end mode=fallback reason='{}' q='{}' toolCalls={} totalTokens={} took={}ms",
+                    reason, logMessage(query), toolCallCount(response), response.totalTokens(), System.currentTimeMillis() - start);
+            return response;
+        }
+
+        try {
+            log.info("v3 agent chat mode=api provider={} model={} q='{}'",
+                    moonshotProperties.providerName(), moonshotProperties.chatModel(), logMessage(query));
+            AgentChatResponse response = aiNativeChat(query, history, sink);
+            log.info("v3 agent chat end mode=api q='{}' toolCalls={} totalTokens={} took={}ms",
+                    logMessage(query), toolCallCount(response), response.totalTokens(), System.currentTimeMillis() - start);
+            return response;
+        } catch (ExternalServiceException ex) {
+            log.warn("v3 agent fallback on chat api error query='{}' reason={}", query, ex.getMessage());
+            sink.accept(new AgentTraceEvent("error", "Chat API failed, fallback to local strategy"));
+            AgentChatResponse response = localFallbackChat(query, history, sink);
+            log.info("v3 agent chat end mode=fallback reason='api_error: {}' q='{}' toolCalls={} totalTokens={} took={}ms",
+                    ex.getMessage(), logMessage(query), toolCallCount(response), response.totalTokens(), System.currentTimeMillis() - start);
+            return response;
+        }
+    }
+
+    private AgentChatResponse aiNativeChat(String query, List<AgentMessage> history, Consumer<AgentTraceEvent> sink) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", buildSystemPrompt()));
+        if (history != null) {
+            for (AgentMessage msg : history) {
+                if (msg == null || msg.role() == null || msg.content() == null) {
+                    continue;
+                }
+                String role = msg.role().trim().toLowerCase(Locale.ROOT);
+                if (!role.equals("user") && !role.equals("assistant")) {
+                    continue;
+                }
+                messages.add(Map.of("role", role, "content", msg.content()));
+            }
+        }
+        messages.add(Map.of("role", "user", "content", query));
+
+        List<Map<String, Object>> tools = List.of(Map.of(
+                "type", "function",
+                "function", Map.of(
+                        "name", "readFile",
+                        "description", "Read a file from data/ by exact filename, for example sop-001.html",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "filename", Map.of(
+                                                "type", "string",
+                                                "description", "The exact file name in data/, such as sop-001.html"
+                                        )
+                                ),
+                                "required", List.of("filename"),
+                                "additionalProperties", false
+                        )
+                )
+        ));
+
+        List<AgentToolCall> toolCalls = new ArrayList<>();
+        long totalTokens = 0;
+        String finalAnswer = "";
+
+        for (int round = 0; round < Math.max(1, moonshotProperties.maxToolRounds()); round++) {
+            log.info("v3 chat api request round={} messages={} tools={} provider={} model={}",
+                    round + 1, messages.size(), tools.size(), moonshotProperties.providerName(), moonshotProperties.chatModel());
+            JsonNode root = moonshotChatClient.chatCompletion(messages, tools);
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                throw new ExternalServiceException("Chat API response has no choices");
+            }
+            JsonNode assistant = choices.get(0).path("message");
+            totalTokens = Math.max(totalTokens, root.path("usage").path("total_tokens").asLong(totalTokens));
+
+            JsonNode toolCallsNode = assistant.path("tool_calls");
+            if (toolCallsNode.isArray() && !toolCallsNode.isEmpty()) {
+                Map<String, Object> assistantWithTools = new LinkedHashMap<>();
+                assistantWithTools.put("role", "assistant");
+                assistantWithTools.put("content", assistant.path("content").isNull() ? "" : assistant.path("content").asText(""));
+                assistantWithTools.put("tool_calls", objectMapper.convertValue(toolCallsNode, new TypeReference<List<Map<String, Object>>>() { }));
+                messages.add(assistantWithTools);
+
+                for (JsonNode tc : toolCallsNode) {
+                    String toolCallId = tc.path("id").asText("");
+                    String functionName = tc.path("function").path("name").asText("");
+                    String argumentsRaw = tc.path("function").path("arguments").asText("{}");
+                    log.info("v3 tool call tool={} args={}", functionName, argumentsRaw);
+                    sink.accept(new AgentTraceEvent("tool_call", "{\"tool\":\"" + functionName + "\",\"args\":" + argumentsRaw + "}"));
+
+                    ToolExecutionResult execution = executeTool(functionName, argumentsRaw);
+                    toolCalls.add(execution.toolCall());
+                    log.info("v3 tool result tool={} success={} length={}",
+                            execution.toolCall().tool(), execution.toolCall().success(), execution.toolCall().length());
+                    sink.accept(new AgentTraceEvent("tool_result", execution.tracePayload()));
+
+                    Map<String, Object> toolMessage = new LinkedHashMap<>();
+                    toolMessage.put("role", "tool");
+                    toolMessage.put("tool_call_id", toolCallId);
+                    toolMessage.put("content", execution.modelPayload());
+                    messages.add(toolMessage);
+                }
+                continue;
+            }
+
+            finalAnswer = assistant.path("content").isNull() ? "" : assistant.path("content").asText("");
+            if (!finalAnswer.isBlank()) {
+                break;
+            }
+        }
+
+        if (finalAnswer.isBlank()) {
+            throw new ExternalServiceException("Chat API returned empty final answer");
+        }
+        for (String line : splitAnswer(finalAnswer)) {
+            sink.accept(new AgentTraceEvent("message", line));
+        }
+        sink.accept(new AgentTraceEvent("done", "{\"totalTokens\":" + totalTokens + "}"));
+        return new AgentChatResponse(finalAnswer, toolCalls, totalTokens);
+    }
+
+    private ToolExecutionResult executeTool(String functionName, String argumentsRaw) {
+        if (!"readFile".equals(functionName)) {
+            String trace = "{\"success\":false,\"error\":\"unsupported tool: " + escapeJson(functionName) + "\"}";
+            AgentToolCall call = new AgentToolCall(functionName, Map.of(), false, 0, "unsupported tool");
+            return new ToolExecutionResult(call, trace, trace);
+        }
+
+        String filename = parseFilename(argumentsRaw);
+        try {
+            String raw = readFileTool.readFile(filename);
+            HtmlParser.ParsedHtml parsed = htmlParser.parse(raw);
+            String excerpt = excerpt(parsed.plainText());
+            AgentToolCall call = new AgentToolCall("readFile", Map.of("filename", filename), true, raw.length(), excerpt);
+            String trace = "{\"success\":true,\"length\":" + raw.length() + ",\"title\":\"" + escapeJson(parsed.title()) + "\"}";
+            return new ToolExecutionResult(call, trace, raw);
+        } catch (Exception ex) {
+            String err = ex.getMessage() == null ? "tool execution failed" : ex.getMessage();
+            AgentToolCall call = new AgentToolCall("readFile", Map.of("filename", filename), false, 0, err);
+            String trace = "{\"success\":false,\"error\":\"" + escapeJson(err) + "\"}";
+            return new ToolExecutionResult(call, trace, trace);
+        }
+    }
+
+    private String parseFilename(String argumentsRaw) {
+        try {
+            JsonNode node = objectMapper.readTree(argumentsRaw == null ? "{}" : argumentsRaw);
+            String filename = node.path("filename").asText("").trim();
+            if (filename.isBlank()) {
+                throw new IllegalArgumentException("filename is required");
+            }
+            return filename;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("invalid tool arguments: " + argumentsRaw, ex);
+        }
+    }
+
+    private AgentChatResponse localFallbackChat(String query, List<AgentMessage> history, Consumer<AgentTraceEvent> sink) {
         List<DocumentEntity> candidates = resolveCandidates(query);
         if (candidates.isEmpty()) {
             throw new IllegalArgumentException("No SOP documents available. Please upload data first.");
         }
+        log.info("v3 local fallback candidates q='{}' ids={}", logMessage(query), candidateIds(candidates));
 
         List<AgentToolCall> toolCalls = new ArrayList<>();
-        List<Evidence> evidenceList = new ArrayList<>();
+        List<String> evidence = new ArrayList<>();
+        List<String> groundedEvidence = new ArrayList<>();
         for (DocumentEntity candidate : candidates) {
             String filename = candidate.id() + ".html";
             sink.accept(new AgentTraceEvent("tool_call", "{\"tool\":\"readFile\",\"args\":{\"filename\":\"" + filename + "\"}}"));
-            String raw = readFileTool.readFile(filename);
-            HtmlParser.ParsedHtml parsed = htmlParser.parse(raw);
-            String excerpt = excerpt(parsed.plainText(), query);
-            AgentToolCall toolCall = new AgentToolCall(
-                    "readFile",
-                    Map.of("filename", filename),
-                    true,
-                    raw.length(),
-                    excerpt
-            );
-            toolCalls.add(toolCall);
-            sink.accept(new AgentTraceEvent(
-                    "tool_result",
-                    "{\"success\":true,\"length\":" + raw.length() + ",\"title\":\"" + escapeJson(parsed.title()) + "\"}"
-            ));
-            evidenceList.add(new Evidence(candidate.id(), parsed.title(), parsed.plainText()));
+            try {
+                String raw = readFileTool.readFile(filename);
+                HtmlParser.ParsedHtml parsed = htmlParser.parse(raw);
+                String excerpt = excerpt(parsed.plainText());
+                groundedEvidence.addAll(formatGroundedEvidence(filename, parsed.plainText(), query));
+                toolCalls.add(new AgentToolCall("readFile", Map.of("filename", filename), true, raw.length(), excerpt));
+                log.info("v3 local fallback tool result filename={} success=true length={}", filename, raw.length());
+                sink.accept(new AgentTraceEvent("tool_result", "{\"success\":true,\"length\":" + raw.length() + ",\"title\":\"" + escapeJson(parsed.title()) + "\"}"));
+                evidence.add(filename + "（" + parsed.title() + "）");
+            } catch (Exception ex) {
+                String err = ex.getMessage() == null ? "read failed" : ex.getMessage();
+                toolCalls.add(new AgentToolCall("readFile", Map.of("filename", filename), false, 0, err));
+                log.warn("v3 local fallback tool result filename={} success=false reason={}", filename, err);
+                sink.accept(new AgentTraceEvent("tool_result", "{\"success\":false,\"error\":\"" + escapeJson(err) + "\"}"));
+            }
         }
+        String answer = """
+                已基于 SOP 给出处置建议（本次为本地降级策略）：
+                1. 先确认故障影响范围和告警级别（P0/P1）。
+                2. 按 SOP 执行快速止血：限流、降级、回滚、隔离。
+                3. 同步升级路径并明确负责人，持续更新进展。
+                4. 恢复后补充复盘：根因、修复、预防项。
 
-        String answer = composeAnswer(query, evidenceList, history);
-        for (String chunk : splitAnswer(answer)) {
-            sink.accept(new AgentTraceEvent("message", chunk));
+                参考文档：%s
+                """.formatted(String.join("，", evidence));
+        if (!groundedEvidence.isEmpty()) {
+            answer += "\n\nSOP 关键依据：\n" + String.join("\n", groundedEvidence);
         }
-        long totalTokens = estimateTokens(query, evidenceList, answer);
+        if (history != null && !history.isEmpty()) {
+            answer += "\n（已结合历史对话上下文）";
+        }
+        for (String line : splitAnswer(answer)) {
+            sink.accept(new AgentTraceEvent("message", line));
+        }
+        long totalTokens = Math.max(1L, answer.length() / 4L);
         sink.accept(new AgentTraceEvent("done", "{\"totalTokens\":" + totalTokens + "}"));
         return new AgentChatResponse(answer, toolCalls, totalTokens);
     }
@@ -99,12 +317,9 @@ public class AgentService {
         Map<String, Double> scores = new LinkedHashMap<>();
         addRankedScores(scores, semanticSearchService.search(query), 3.0);
         addRankedScores(scores, keywordSearchService.search(query), 1.5);
-
         if (scores.isEmpty()) {
-            List<String> queryTokens = tokenizer.tokenize(query);
-            documentRepository.findAll().forEach(doc -> scores.put(doc.id(), scoreDocument(doc, queryTokens)));
+            documentRepository.findAll().forEach(doc -> scores.put(doc.id(), 0.0));
         }
-
         return scores.entrySet().stream()
                 .sorted(Map.Entry.<String, Double>comparingByValue(Comparator.reverseOrder()))
                 .limit(3)
@@ -121,92 +336,103 @@ public class AgentService {
         }
     }
 
-    private double scoreDocument(DocumentEntity doc, List<String> queryTokens) {
-        if (doc == null || queryTokens == null || queryTokens.isEmpty()) {
+    private List<String> formatGroundedEvidence(String filename, String plainText, String query) {
+        List<String> lines = extractRelevantLines(plainText, query);
+        List<String> formatted = new ArrayList<>();
+        for (int i = 0; i < lines.size() && i < 2; i++) {
+            formatted.add("- [" + filename + "] " + lines.get(i));
+        }
+        return formatted;
+    }
+
+    private List<String> extractRelevantLines(String plainText, String query) {
+        List<String> candidates = splitEvidenceCandidates(plainText);
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> terms = queryTerms(query);
+        List<EvidenceLine> scored = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            String line = normalizeEvidenceLine(candidates.get(i));
+            double score = evidenceScore(line, terms, query);
+            if (score > 0) {
+                scored.add(new EvidenceLine(line, score, i));
+            }
+        }
+
+        if (scored.isEmpty()) {
+            return candidates.stream()
+                    .map(this::normalizeEvidenceLine)
+                    .filter(line -> !line.isBlank())
+                    .limit(3)
+                    .toList();
+        }
+
+        scored.sort(Comparator.comparingDouble(EvidenceLine::score).reversed()
+                .thenComparingInt(EvidenceLine::index));
+        return scored.stream()
+                .map(EvidenceLine::text)
+                .distinct()
+                .limit(3)
+                .toList();
+    }
+
+    private List<String> splitEvidenceCandidates(String plainText) {
+        if (plainText == null || plainText.isBlank()) {
+            return List.of();
+        }
+        String normalized = plainText.replace('\r', ' ')
+                .replace('\n', ' ')
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (normalized.isBlank()) {
+            return List.of();
+        }
+        String[] parts = normalized.split("(?<=[。！？!?；;])\\s*");
+        List<String> candidates = new ArrayList<>();
+        for (String part : parts) {
+            String line = part == null ? "" : part.trim();
+            if (line.length() >= 12) {
+                candidates.add(line);
+            }
+        }
+        return candidates;
+    }
+
+    private List<String> queryTerms(String query) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        String[] parts = query.toLowerCase(Locale.ROOT)
+                .split("[\\s,，.。:：;；!?！？()（）\\[\\]{}<>《》\"'、/\\\\]+");
+        List<String> terms = new ArrayList<>();
+        for (String part : parts) {
+            String term = part == null ? "" : part.trim();
+            if (term.length() >= 2 && !terms.contains(term)) {
+                terms.add(term);
+            }
+        }
+        return terms;
+    }
+
+    private double evidenceScore(String line, List<String> terms, String query) {
+        if (line == null || line.isBlank()) {
             return 0;
         }
-        String haystack = (doc.title() + " " + doc.plainText()).toLowerCase(Locale.ROOT);
+        String lowerLine = line.toLowerCase(Locale.ROOT);
+        String lowerQuery = query == null ? "" : query.toLowerCase(Locale.ROOT).trim();
         double score = 0;
-        for (String token : queryTokens) {
-            if (token.isBlank()) {
-                continue;
-            }
-            if (haystack.contains(token.toLowerCase(Locale.ROOT))) {
-                score += 1.0;
-            }
+        if (!lowerQuery.isBlank() && lowerLine.contains(lowerQuery)) {
+            score += 20;
         }
-        return score;
-    }
-
-    private String composeAnswer(String query, List<Evidence> evidenceList, List<AgentMessage> history) {
-        StringBuilder sb = new StringBuilder();
-        if (evidenceList.size() == 1) {
-            Evidence evidence = evidenceList.get(0);
-            sb.append("我读取了 ").append(evidence.filename()).append("（").append(evidence.title()).append("）。");
-            sb.append("建议按文档里的排查顺序处理：");
-            appendBullets(sb, extractActionItems(evidence.plainText(), query, 4));
-        } else {
-            String docs = evidenceList.stream()
-                    .map(e -> e.filename() + "（" + e.title() + "）")
-                    .collect(Collectors.joining("、"));
-            sb.append("我综合了 ").append(docs).append("。");
-            sb.append("建议按下面顺序处理：");
-            List<String> items = new ArrayList<>();
-            for (Evidence evidence : evidenceList) {
-                items.addAll(extractActionItems(evidence.plainText(), query, 2));
-            }
-            appendBullets(sb, dedupe(items, 5));
-        }
-
-        if (history != null && !history.isEmpty()) {
-            sb.append("\n\n（已结合历史对话上下文）");
-        }
-        return sb.toString().trim();
-    }
-
-    private List<String> extractActionItems(String text, String query, int maxItems) {
-        List<String> queryTokens = tokenizer.tokenize(query);
-        List<String> sentences = splitSentences(text);
-        List<ScoredSentence> scored = new ArrayList<>();
-        for (String sentence : sentences) {
-            double score = scoreSentence(sentence, queryTokens);
-            if (score > 0) {
-                scored.add(new ScoredSentence(sentence, score));
+        for (String term : terms) {
+            if (lowerLine.contains(term)) {
+                score += Math.min(8, Math.max(2, term.length()));
             }
         }
-        if (scored.isEmpty()) {
-            for (String sentence : sentences) {
-                if (sentence.length() > 8) {
-                    scored.add(new ScoredSentence(sentence, 0.1));
-                }
-            }
-        }
-        scored.sort(Comparator.comparingDouble(ScoredSentence::score).reversed());
-        return scored.stream()
-                .map(ScoredSentence::sentence)
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .map(this::cleanSentence)
-                .limit(maxItems)
-                .collect(Collectors.toList());
-    }
-
-    private double scoreSentence(String sentence, List<String> queryTokens) {
-        String lower = sentence.toLowerCase(Locale.ROOT);
-        double score = 0;
-        for (String token : queryTokens) {
-            if (token.isBlank()) {
-                continue;
-            }
-            if (lower.contains(token.toLowerCase(Locale.ROOT))) {
-                score += 2.0;
-            }
-        }
-        if (containsAny(lower, "检查", "确认", "排查", "处理", "降级", "回滚", "重启", "恢复", "告警", "升级", "隔离", "封禁", "限流")) {
-            score += 1.5;
-        }
-        if (sentence.matches(".*[一二三四五六七八九十0-9][、\\.|\\)]?.*")) {
-            score += 1.0;
+        if (containsAny(lowerLine, "p0", "p1", "oom", "outofmemory", "回滚", "限流", "降级", "升级", "隔离")) {
+            score += 2;
         }
         return score;
     }
@@ -220,114 +446,68 @@ public class AgentService {
         return false;
     }
 
-    private List<String> splitSentences(String text) {
-        if (text == null || text.isBlank()) {
-            return List.of();
-        }
-        String normalized = text.replace("\r", "\n");
-        String[] parts = normalized.split("[\\n。！？；;]+");
-        List<String> sentences = new ArrayList<>();
-        for (String part : parts) {
-            String trimmed = part.trim();
-            if (!trimmed.isBlank()) {
-                sentences.add(trimmed);
-            }
-        }
-        return sentences;
-    }
-
-    private List<String> dedupe(List<String> items, int maxItems) {
-        return items.stream()
-                .map(this::cleanSentence)
-                .distinct()
-                .limit(maxItems)
-                .collect(Collectors.toList());
-    }
-
-    private String cleanSentence(String sentence) {
-        String result = sentence.replaceAll("\\s+", " ").trim();
-        if (result.length() > 160) {
-            result = result.substring(0, 160).trim() + "...";
-        }
-        return result;
-    }
-
-    private void appendBullets(StringBuilder sb, List<String> items) {
-        if (items.isEmpty()) {
-            sb.append(" 先确认告警、日志和影响范围，再根据 SOP 执行降级或恢复动作。");
-            return;
-        }
-        sb.append("\n");
-        for (int i = 0; i < items.size(); i++) {
-            sb.append(i + 1).append(". ").append(items.get(i));
-            if (i < items.size() - 1) {
-                sb.append("\n");
-            }
-        }
-    }
-
-    private String excerpt(String text, String query) {
-        if (text == null || text.isBlank()) {
+    private String normalizeEvidenceLine(String line) {
+        if (line == null) {
             return "";
         }
-        List<String> queryTokens = tokenizer.tokenize(query);
-        String lower = text.toLowerCase(Locale.ROOT);
-        int idx = -1;
-        for (String token : queryTokens) {
-            idx = lower.indexOf(token.toLowerCase(Locale.ROOT));
-            if (idx >= 0) {
-                break;
-            }
-        }
-        if (idx < 0) {
-            idx = 0;
-        }
-        int start = Math.max(0, idx - 40);
-        int end = Math.min(text.length(), idx + 120);
-        String value = text.substring(start, end).trim();
-        if (start > 0) {
-            value = "..." + value;
-        }
-        if (end < text.length()) {
-            value = value + "...";
-        }
-        return value;
-    }
-
-    private long estimateTokens(String query, List<Evidence> evidenceList, String answer) {
-        int chars = query == null ? 0 : query.length();
-        for (Evidence evidence : evidenceList) {
-            chars += evidence.plainText().length();
-        }
-        chars += answer.length();
-        return Math.max(1L, Math.round(chars / 4.0));
+        String trimmed = line.replaceAll("\\s+", " ").trim();
+        return trimmed.length() <= 180 ? trimmed : trimmed.substring(0, 180) + "...";
     }
 
     private List<String> splitAnswer(String answer) {
         if (answer == null || answer.isBlank()) {
             return List.of();
         }
-        List<String> chunks = new ArrayList<>();
-        for (String line : answer.split("\\n")) {
-            String trimmed = line.trim();
-            if (!trimmed.isBlank()) {
-                chunks.add(trimmed);
-            }
+        return answer.lines()
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .toList();
+    }
+
+    private String excerpt(String plainText) {
+        if (plainText == null || plainText.isBlank()) {
+            return "";
         }
-        return chunks;
+        String trimmed = plainText.trim();
+        return trimmed.length() <= 140 ? trimmed : trimmed.substring(0, 140) + "...";
     }
 
     private String escapeJson(String value) {
         if (value == null) {
             return "";
         }
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"");
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private record Evidence(String filename, String title, String plainText) {
+    private int toolCallCount(AgentChatResponse response) {
+        return response.toolCalls() == null ? 0 : response.toolCalls().size();
     }
 
-    private record ScoredSentence(String sentence, double score) {
+    private String candidateIds(List<DocumentEntity> candidates) {
+        return candidates.stream()
+                .map(DocumentEntity::id)
+                .collect(Collectors.joining(","));
+    }
+
+    private String logMessage(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 120 ? normalized : normalized.substring(0, 120) + "...";
+    }
+
+    private record ToolExecutionResult(
+            AgentToolCall toolCall,
+            String tracePayload,
+            String modelPayload
+    ) {
+    }
+
+    private record EvidenceLine(
+            String text,
+            double score,
+            int index
+    ) {
     }
 }

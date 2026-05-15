@@ -1,5 +1,7 @@
 package com.oncall.common.util;
 
+import com.hankcs.hanlp.HanLP;
+import com.hankcs.hanlp.seg.common.Term;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -15,25 +17,30 @@ public class TextTokenizer {
             return tokens;
         }
 
-        StringBuilder current = new StringBuilder();
+        StringBuilder ascii = new StringBuilder();
+        StringBuilder cjk = new StringBuilder();
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
             if (isAsciiLetterOrDigit(c)) {
-                current.append(Character.toLowerCase(c));
+                flushCjk(tokens, cjk);
+                ascii.append(Character.toLowerCase(c));
                 continue;
             }
 
-            flushCurrent(tokens, current);
             if (isCjk(c)) {
-                // Keep CJK characters as searchable units so queries like "故障" can match.
-                tokens.add(String.valueOf(c));
+                flushAscii(tokens, ascii);
+                cjk.append(c);
                 continue;
             }
+
+            flushAscii(tokens, ascii);
+            flushCjk(tokens, cjk);
             if (c == '&') {
                 tokens.add("&");
             }
         }
-        flushCurrent(tokens, current);
+        flushAscii(tokens, ascii);
+        flushCjk(tokens, cjk);
 
         if (tokens.isEmpty()) {
             tokens.add(input.trim().toLowerCase(Locale.ROOT));
@@ -41,11 +48,25 @@ public class TextTokenizer {
         return tokens;
     }
 
-    private void flushCurrent(List<String> tokens, StringBuilder current) {
-        if (!current.isEmpty()) {
-            tokens.add(current.toString());
-            current.setLength(0);
+    private void flushAscii(List<String> tokens, StringBuilder ascii) {
+        if (!ascii.isEmpty()) {
+            tokens.add(ascii.toString());
+            ascii.setLength(0);
         }
+    }
+
+    private void flushCjk(List<String> tokens, StringBuilder cjk) {
+        if (cjk.isEmpty()) {
+            return;
+        }
+        String text = cjk.toString();
+        for (Term term : HanLP.segment(text)) {
+            String word = term.word == null ? "" : term.word.trim().toLowerCase(Locale.ROOT);
+            if (!word.isBlank()) {
+                tokens.add(word);
+            }
+        }
+        cjk.setLength(0);
     }
 
     private boolean isAsciiLetterOrDigit(char c) {

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>On-Call Assistant</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" href="/">
+        <span class="brand-mark">OC</span>
+        <span>On-Call Assistant</span>
+    </a>
+    <nav class="phase-nav" aria-label="阶段导航">
+        <a class="nav-link" href="/v1">v1 搜索</a>
+        <a class="nav-link" href="/v2">v2 语义</a>
+        <a class="nav-link" href="/v3">v3 Agent</a>
+    </nav>
+</header>
+
+<main class="page-shell">
+    <section class="dashboard-hero">
+        <div>
+            <p class="eyebrow">On-Call SOP Workbench</p>
+            <h1>选择一个阶段开始调试</h1>
+            <p class="section-copy">统一入口用于演示关键词检索、语义搜索和 Agent 对话。每个阶段保留独立路由和接口，方便逐项验收。</p>
+        </div>
+        <div class="system-summary">
+            <span>10 SOP</span>
+            <span>3 Phases</span>
+            <span>API Trace</span>
+        </div>
+    </section>
+
+    <section class="phase-grid" aria-label="阶段选择">
+        <a class="phase-card phase-one" href="/v1">
+            <span class="phase-kicker">Phase 1</span>
+            <h2>关键词搜索</h2>
+            <p>精确定位 OOM、CDN、kubectl、慢查询等出现在正文里的关键字。</p>
+            <span class="phase-action">进入 v1</span>
+        </a>
+        <a class="phase-card phase-two" href="/v2">
+            <span class="phase-kicker">Phase 2</span>
+            <h2>语义搜索</h2>
+            <p>用自然语言描述故障现象，由 embedding 和文本信号共同排序 SOP。</p>
+            <span class="phase-action">进入 v2</span>
+        </a>
+        <a class="phase-card phase-three" href="/v3">
+            <span class="phase-kicker">Phase 3</span>
+            <h2>Agent 对话</h2>
+            <p>通过对话查看 Agent 如何选择 SOP、调用 readFile，并给出处置建议。</p>
+            <span class="phase-action">进入 v3</span>
+        </a>
+    </section>
+</main>
+</body>
+</html>

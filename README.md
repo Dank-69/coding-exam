@@ -1,43 +1,113 @@
-# On-Call Assistant（项目一）交付说明
+# On-Call Assistant (Coding Exam Project 1)
 
-本仓库用于完成 Moonshot AI 编程挑战「项目一：On-Call 助手」。
+This project implements three phases required by the exam:
 
-## 当前目标
+- `v1`: keyword search engine
+- `v2`: semantic search (AI embedding first, local fallback second)
+- `v3`: On-Call agent with `readFile(filename)` tool trace
 
-1. 在 48 小时内交付可运行作品（`/v1`、`/v2`、`/v3`）。
-2. 保证题目给出的验证用例可复现、可截图、可解释。
-3. 产出可打包提交的完整材料（代码、简历、prompt、说明文档）。
+## Tech Stack
 
-## 项目范围
+- Java 21
+- Spring Boot 3.4
+- Thymeleaf
+- Jsoup
+- Spring WebFlux `WebClient` (Moonshot API calls)
 
-1. `Phase 1`：关键词搜索引擎（必须稳定通过）。
-2. `Phase 2`：语义搜索（按相关性排序）。
-3. `Phase 3`：On-Call Agent（展示工具调用轨迹）。
+## Run
 
-题目原文已存档在 [EXAM_REQUIREMENTS.md](/D:/codingtest/EXAM_REQUIREMENTS.md)。
+```bash
+mvn spring-boot:run
+```
 
-## 交付物清单（最终 ZIP）
+Service starts at `http://localhost:8080`.
 
-1. 源码工程（可直接启动运行）。
-2. [README.md](/D:/codingtest/README.md)（启动步骤、接口说明、验证步骤）。
-3. [DESIGN_DOC.md](/D:/codingtest/DESIGN_DOC.md)（设计说明）。
-4. `RESUME.pdf`（简历）。
-5. `PROMPTS.md`（关键 prompt 记录）。
-6. `screenshots/`（运行截图、验证截图）。
+## Required Environment Variables
 
-## 验收标准（最低）
+For full AI-native behavior in `v2`/`v3`:
 
-1. `Phase 1` 五条官方查询全部符合预期。
-2. `Phase 2` 三条语义查询结果排序符合预期。
-3. `Phase 3` 能回答五类问题，并展示 `tool_call/tool_result`。
-4. 项目可一条命令启动，接口可复测。
+```bash
+MOONSHOT_API_KEY=sk-xxx
+```
 
-## 开发顺序建议
+Optional:
 
-1. 先完成 `Phase 1` 并锁定接口和数据结构。
-2. 再接入 `Phase 2` 向量检索，保留降级策略。
-3. 最后完成 `Phase 3` Agent 编排和 SSE 展示。
+```bash
+AI_PROVIDER=moonshot
+MOONSHOT_BASE_URL=https://api.moonshot.cn/v1
+MOONSHOT_CHAT_MODEL=moonshot-v1-8k
+AI_TIMEOUT_SECONDS=20
+AI_MAX_TOOL_ROUNDS=4
+```
 
-## 下一步
+Embedding options:
 
-编码前请先按 [DELIVERY_CHECKLIST.md](/D:/codingtest/DELIVERY_CHECKLIST.md) 逐项确认。
+```bash
+AI_EMBEDDINGS_ENABLED=true
+AI_EMBEDDING_MODEL=text-embedding-v1
+```
+
+If `MOONSHOT_API_KEY` is missing, the system automatically degrades:
+
+- `v2` uses local semantic fallback ranking
+- `v3` uses local fallback agent strategy
+
+If embedding is disabled, `v2` also degrades to local fallback ranking.
+
+## Data Bootstrap
+
+By default, service startup auto-imports `data/*.html` into in-memory store:
+
+```bash
+ONCALL_BOOTSTRAP_ENABLED=true
+ONCALL_BOOTSTRAP_DATA_DIR=data
+```
+
+If you need manual upload mode:
+
+```powershell
+$files = Get-ChildItem .\data\*.html
+foreach ($f in $files) {
+  $id = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+  $html = [System.IO.File]::ReadAllText($f.FullName, [System.Text.Encoding]::UTF8)
+  $payload = @{ id = $id; html = $html } | ConvertTo-Json -Compress
+  Invoke-RestMethod -Uri "http://localhost:8080/v1/documents" -Method Post -ContentType "application/json; charset=utf-8" -Body $payload | Out-Null
+}
+```
+
+## Pages
+
+- `http://localhost:8080/v1`
+- `http://localhost:8080/v2`
+- `http://localhost:8080/v3`
+
+## API Summary
+
+### Phase 1
+
+- `POST /v1/documents`
+- `GET /v1/search?q=...`
+
+### Phase 2
+
+- `GET /v2/search?q=...`
+
+### Phase 3
+
+- `GET /v3/chat?message=...` (SSE stream with `thinking/tool_call/tool_result/message/done`)
+- `POST /v3/chat` (JSON)
+
+## Validation Commands
+
+```bash
+mvn -q -DskipTests compile
+mvn -q -Dtest=Phase1OfficialAcceptanceTest test
+mvn -q -Dtest=Phase2OfficialAcceptanceTest test
+mvn -q -Dtest=Phase3ControllerTest test
+```
+
+## Notes
+
+- Error format is unified by global exception handler.
+- External AI API errors return `503` with code `EXTERNAL_SERVICE_UNAVAILABLE`.
+- Logging includes request path, query, result count, and timing for major paths.

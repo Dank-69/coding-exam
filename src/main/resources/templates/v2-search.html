@@ -3,23 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>On-Call Assistant - Phase 2 Semantic Search</title>
+    <title>Phase 2 语义搜索 | On-Call Assistant</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-<main class="container">
-    <h1>On-Call Assistant / Phase 2</h1>
-    <form method="get" action="/v2" class="search-form" id="searchForm">
-        <input type="text" name="q" id="queryInput" th:value="${query}" placeholder="Try: 服务器挂了 / 黑客攻击 / 机器学习模型出问题"/>
-        <button type="submit">Search</button>
-    </form>
+<header class="topbar">
+    <a class="brand" href="/">
+        <span class="brand-mark">OC</span>
+        <span>On-Call Assistant</span>
+    </a>
+    <nav class="phase-nav" aria-label="阶段导航">
+        <a class="nav-link" href="/v1">v1 搜索</a>
+        <a class="nav-link active" href="/v2">v2 语义</a>
+        <a class="nav-link" href="/v3">v3 Agent</a>
+    </nav>
+</header>
 
-    <p id="apiHint" class="api-hint muted">Ready</p>
+<main class="page-shell">
+    <section class="workbench">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Phase 2</p>
+                <h1>语义检索</h1>
+                <p class="section-copy">用 embedding 相似度结合文本信号排序，适合自然语言描述故障现象。</p>
+            </div>
+            <a class="secondary-action" href="/">返回主界面</a>
+        </div>
 
-    <section class="results" id="resultsSection">
-        <h2>Results</h2>
-        <p class="muted" id="emptyHint">Input query and click Search</p>
-        <div id="resultList"></div>
+        <form method="get" action="/v2" class="search-form" id="searchForm">
+            <label class="input-wrap" for="queryInput">
+                <span>故障描述</span>
+                <input type="text" name="q" id="queryInput" th:value="${query}" placeholder="例如：JS 文件加载失败、模型特征服务不可用、数据库查询变慢">
+            </label>
+            <button class="primary-action" type="submit">搜索</button>
+        </form>
+
+        <div id="apiHint" class="status-strip">等待输入故障描述</div>
+    </section>
+
+    <section class="content-grid single">
+        <div class="panel">
+            <div class="panel-header">
+                <h2>语义匹配结果</h2>
+                <span id="resultCount" class="counter">0</span>
+            </div>
+            <p class="empty-state" id="emptyHint">输入自然语言问题后开始搜索。</p>
+            <div id="resultList" class="result-list"></div>
+        </div>
     </section>
 </main>
 
@@ -29,9 +59,10 @@
     const apiHint = document.getElementById("apiHint");
     const emptyHint = document.getElementById("emptyHint");
     const resultList = document.getElementById("resultList");
+    const resultCount = document.getElementById("resultCount");
 
     function escapeHtml(value) {
-        return value
+        return String(value || "")
             .replaceAll("&", "&amp;")
             .replaceAll("<", "&lt;")
             .replaceAll(">", "&gt;")
@@ -41,20 +72,24 @@
 
     function renderResults(results) {
         resultList.innerHTML = "";
+        resultCount.textContent = results ? results.length : 0;
         if (!results || results.length === 0) {
             emptyHint.style.display = "block";
-            emptyHint.textContent = "No results";
+            emptyHint.textContent = "没有找到相关 SOP。";
             return;
         }
         emptyHint.style.display = "none";
 
-        results.forEach((item) => {
+        results.forEach((item, index) => {
             const card = document.createElement("article");
             card.className = "result-card";
             card.innerHTML = `
-                <h3>${escapeHtml(item.id)} - ${escapeHtml(item.title)}</h3>
-                <p>${escapeHtml(item.snippet || "")}</p>
-                <p class="score">score: ${item.score}</p>
+                <div class="result-rank">${index + 1}</div>
+                <div class="result-body">
+                    <h3>${escapeHtml(item.id)} · ${escapeHtml(item.title)}</h3>
+                    <p>${escapeHtml(item.snippet || "")}</p>
+                    <div class="score-line">score ${escapeHtml(item.score)}</div>
+                </div>
             `;
             resultList.appendChild(card);
         });
@@ -63,34 +98,36 @@
     async function doSearch(query) {
         const q = (query || "").trim();
         if (!q) {
-            apiHint.textContent = "Please input a query";
+            apiHint.textContent = "请输入故障描述后再搜索";
             resultList.innerHTML = "";
+            resultCount.textContent = "0";
             emptyHint.style.display = "block";
-            emptyHint.textContent = "Input query and click Search";
+            emptyHint.textContent = "输入自然语言问题后开始搜索。";
             return;
         }
 
         const url = `/v2/search?q=${encodeURIComponent(q)}`;
-        apiHint.textContent = `Calling API: GET ${url}`;
+        apiHint.textContent = `调用接口：GET ${url}`;
         try {
             const resp = await fetch(url);
             if (!resp.ok) {
                 throw new Error(`HTTP ${resp.status}`);
             }
             const data = await resp.json();
-            apiHint.textContent = `Done: GET ${url} | took=${data.took}ms | results=${(data.results || []).length}`;
+            apiHint.textContent = `完成：${data.took}ms，返回 ${(data.results || []).length} 条结果`;
             renderResults(data.results || []);
             history.replaceState(null, "", `/v2?q=${encodeURIComponent(q)}`);
         } catch (err) {
-            apiHint.textContent = `Failed: GET ${url} | ${err.message}`;
+            apiHint.textContent = `搜索失败：${err.message}`;
             resultList.innerHTML = "";
+            resultCount.textContent = "0";
             emptyHint.style.display = "block";
-            emptyHint.textContent = "Search failed, please retry";
+            emptyHint.textContent = "接口调用失败，请稍后重试。";
         }
     }
 
-    form.addEventListener("submit", (e) => {
-        e.preventDefault();
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
         doSearch(queryInput.value);
     });
 
@@ -100,4 +137,3 @@
 </script>
 </body>
 </html>
-

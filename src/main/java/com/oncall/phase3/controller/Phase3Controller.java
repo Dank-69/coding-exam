@@ -9,16 +9,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -34,43 +35,77 @@ public class Phase3Controller {
 
     @GetMapping
     public String page(@RequestParam(name = "message", required = false) String message, Model model) {
+        log.info("GET /v3 page messagePresent={}", message != null && !message.isBlank());
         model.addAttribute("message", message == null ? "" : message);
         return "v3-chat";
     }
 
     @GetMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter chatStream(@RequestParam("message") String message) {
-        SseEmitter emitter = new SseEmitter(0L);
-        CompletableFuture.runAsync(() -> {
-            try {
-                agentService.chat(message, List.of(), event -> send(emitter, event));
-                emitter.complete();
-            } catch (Exception ex) {
-                log.warn("Agent stream failed", ex);
-                send(emitter, new AgentTraceEvent("error", ex.getMessage() == null ? "internal error" : ex.getMessage()));
-                emitter.completeWithError(ex);
-            }
-        });
-        return emitter;
+    @ResponseBody
+    public Flux<ServerSentEvent<String>> chatStream(@RequestParam("message") String message) {
+        long start = System.currentTimeMillis();
+        String logQuery = logMessage(message);
+        log.info("GET /v3/chat stream start q='{}'", logQuery);
+        return Flux.<AgentTraceEvent>create(fluxSink -> {
+            CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
+                try {
+                    agentService.chat(message, List.of(), event -> {
+                        if (!fluxSink.isCancelled()) {
+                            fluxSink.next(event);
+                        }
+                    });
+                    if (!fluxSink.isCancelled()) {
+                        fluxSink.complete();
+                    }
+                } catch (Exception ex) {
+                    log.warn("Agent stream failed", ex);
+                    if (!fluxSink.isCancelled()) {
+                        fluxSink.next(new AgentTraceEvent("error", ex.getMessage() == null ? "internal error" : ex.getMessage()));
+                        fluxSink.complete();
+                    }
+                }
+            });
+            fluxSink.onCancel(() -> task.cancel(true));
+        })
+                .doFinally(signalType -> log.info("GET /v3/chat stream end q='{}' signal={} took={}ms",
+                        logQuery, signalType, System.currentTimeMillis() - start))
+                .map(this::toSseEvent);
     }
 
     @PostMapping(value = "/chat", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AgentChatResponse> chatJson(@RequestBody AgentChatRequest request) {
+        long start = System.currentTimeMillis();
+        int historySize = request.history() == null ? 0 : request.history().size();
+        String logQuery = logMessage(request.message());
+        log.info("POST /v3/chat json start q='{}' history={}", logQuery, historySize);
         AgentChatResponse response = agentService.chat(
                 request.message(),
                 request.history() == null ? List.of() : request.history(),
                 event -> { }
         );
+        log.info("POST /v3/chat json end q='{}' toolCalls={} totalTokens={} took={}ms",
+                logQuery, toolCallCount(response), response.totalTokens(), System.currentTimeMillis() - start);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .body(response);
     }
 
-    private void send(SseEmitter emitter, AgentTraceEvent event) {
-        try {
-            emitter.send(SseEmitter.event().name(event.type()).data(event.data()));
-        } catch (IOException ex) {
-            throw new IllegalStateException("Failed to send SSE event", ex);
+    private ServerSentEvent<String> toSseEvent(AgentTraceEvent event) {
+        String type = event.type() == null || event.type().isBlank() ? "message" : event.type();
+        return ServerSentEvent.builder(event.data() == null ? "" : event.data())
+                .event(type)
+                .build();
+    }
+
+    private int toolCallCount(AgentChatResponse response) {
+        return response.toolCalls() == null ? 0 : response.toolCalls().size();
+    }
+
+    private String logMessage(String value) {
+        if (value == null) {
+            return "";
         }
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 120 ? normalized : normalized.substring(0, 120) + "...";
     }
 }

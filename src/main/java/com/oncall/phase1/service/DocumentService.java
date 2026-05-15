@@ -21,10 +21,7 @@ public class DocumentService {
         this.repository = repository;
     }
 
-    public DocumentEntity
-
-
-    upsert(String id, String html) {
+    public DocumentEntity upsert(String id, String html) {
         HtmlParser.ParsedHtml parsed = htmlParser.parse(html);
         DocumentEntity document = new DocumentEntity(
                 id,

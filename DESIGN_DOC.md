@@ -1144,7 +1144,7 @@ spring:
     cache: false  # 开发环境禁用缓存
 
 moonshot:
-  api-key: ${MOONSHOT_API_KEY:sk-your-key-here}
+  api-key: ${MOONSHOT_API_KEY:}
   base-url: https://api.moonshot.cn
   embedding-model: moonshot-v1-embedding
   chat-model: moonshot-v1-8k

@@ -30,7 +30,10 @@ public class Phase1Controller {
     private final DocumentService documentService;
     private final KeywordSearchService keywordSearchService;
 
-    public Phase1Controller(DocumentService documentService, KeywordSearchService keywordSearchService) {
+    public Phase1Controller(
+            DocumentService documentService,
+            KeywordSearchService keywordSearchService
+    ) {
         this.documentService = documentService;
         this.keywordSearchService = keywordSearchService;
     }
