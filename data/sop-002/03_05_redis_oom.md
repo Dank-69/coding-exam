@@ -1,0 +1,3 @@
+# 场景五：Redis内存溢出
+
+Redis实例内存使用达到maxmemory限制时，根据淘汰策略的不同表现也不同。如果配置了noeviction策略，写入操作会直接报错。首先通过Redis的INFO MEMORY命令和MEMORY DOCTOR命令了解内存使用详情。使用redis-cli的bigkeys和hotkeys扫描找出大Key和热Key。常见的内存问题包括：Hash类型的Key包含过多字段、List类型无限增长、过期时间设置不合理导致Key堆积。紧急情况下可临时调大maxmemory，但需确认物理内存充足。长期方案包括：清理无用Key、优化数据结构、拆分大Key、设置合理的过期时间。对于集群模式，还需关注各节点的内存均衡。

@@ -11,6 +11,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,16 +36,19 @@ public class MoonshotChatClient {
             throw new ExternalServiceException("Chat API key is missing");
         }
         long start = System.currentTimeMillis();
+        int toolCount = tools == null ? 0 : tools.size();
         log.info("chat request provider={} model={} messages={} tools={}",
-                properties.providerName(), properties.chatModel(), messages.size(), tools.size());
+                properties.providerName(), properties.chatModel(), messages.size(), toolCount);
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", properties.chatModel());
+        requestBody.put("messages", messages);
+        if (tools != null && !tools.isEmpty()) {
+            requestBody.put("tools", tools);
+        }
         JsonNode response = moonshotWebClient.post()
                 .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(Map.of(
-                        "model", properties.chatModel(),
-                        "messages", messages,
-                        "tools", tools
-                ))
+                .bodyValue(requestBody)
                 .retrieve()
                 .onStatus(status -> status.isError(), clientResponse ->
                         clientResponse.bodyToMono(String.class)

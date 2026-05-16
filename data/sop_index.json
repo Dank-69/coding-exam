@@ -1,0 +1,609 @@
+{
+  "description" : "全局 SOP 入口索引。Agent 应先读取本文件，再按 topic/module/scenario 读取 data/sop-xxx/ 下的具体索引或模块文件。",
+  "globalIntents" : {
+    "vague_service_issue" : {
+      "preferredModules" : [ "03_troubleshooting.index.md" ],
+      "aliases" : [ "服务异常", "服务故障", "系统异常", "线上问题" ]
+    },
+    "incident_response" : {
+      "preferredModules" : [ "01_duties.md", "04_escalation.md", "05_forbidden.md" ],
+      "aliases" : [ "故障响应流程", "告警处理流程", "事故处理", "P0流程", "升级流程" ]
+    }
+  },
+  "sops" : [ {
+    "id" : "sop-001",
+    "title" : "后端服务 On-Call SOP",
+    "topic" : "后端服务",
+    "aliases" : [ "后端", "backend", "Java服务", "服务超时", "接口超时", "OOM", "JVM", "数据库连接池", "Kafka积压" ],
+    "originalFile" : "sop-001.html",
+    "indexFile" : "sop-001/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-001/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-001/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-001/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：服务大面积超时",
+          "keywords" : [ "p0", "p1", "故障", "恢复", "降级", "限流", "告警", "redis", "ci", "Nacos", "Kong", "Redis", "MySQL", "Grafana" ],
+          "file" : "sop-001/03_01_service_timeout.md",
+          "summary" : "当发现多个服务同时出现超时告警时，首先检查是否有全局性基础设施故障，包括注册中心Nacos是否正常、网关Kong的健康状态、以及底层Redis和MySQL集群的连通性。通过Grafana的全局大盘快速确认影响范围。如果确认是某个下游依..."
+        }, {
+          "title" : "场景二：单服务OOM崩溃",
+          "keywords" : [ "p0", "p1", "排查", "回滚", "监控", "oom", "outofmemory", "outofmemoryerror", "jvm", "pod", "kubernetes", "崩溃", "OOM", "Java" ],
+          "file" : "sop-001/03_02_oom.md",
+          "summary" : "Java服务出现OutOfMemoryError时，Kubernetes会自动重启Pod。值班人员需在重启后立即保存堆转储文件用于后续分析。检查最近是否有代码发布或配置变更，查看JVM监控面板确认堆内存增长曲线。如果是突发流量导致，需..."
+        }, {
+          "title" : "场景三：数据库连接池耗尽",
+          "keywords" : [ "p0", "p1", "异常", "处理", "监控", "数据库", "连接池", "慢查询", "MySQL", "show", "processlist", "DBA", "Kill" ],
+          "file" : "sop-001/03_03_db_pool_exhausted.md",
+          "summary" : "服务日志出现无法获取数据库连接的错误时，首先通过监控确认连接池使用率。检查是否存在慢查询占用连接不释放的情况，通过MySQL的show processlist命令查看活跃连接。如果确认是慢查询导致，联系DBA团队协助Kill问题查询并..."
+        }, {
+          "title" : "场景四：消息队列积压",
+          "keywords" : [ "p0", "p1", "升级", "延迟", "kafka", "积压", "Kafka", "Manager", "Partition" ],
+          "file" : "sop-001/03_04_kafka_backlog.md",
+          "summary" : "Kafka消费者组出现消费延迟持续增长时，首先确认消费者实例是否正常运行。通过Kafka Manager查看各Partition的消费偏移量，确认是全部Partition积压还是个别Partition倾斜。如果是消费能力不足，临时增加..."
+        }, {
+          "title" : "场景五：配置变更导致服务异常",
+          "keywords" : [ "p0", "p1", "异常", "恢复", "回滚", "Apollo", "Nacos", "Spring", "Cloud", "Config" ],
+          "file" : "sop-001/03_05_config_change.md",
+          "summary" : "Apollo或Nacos配置热更新后服务出现异常，第一时间在配置中心查看最近的变更记录，确认变更内容和变更人。如果能明确是某次配置变更导致，立即回滚配置到上一个版本。配置回滚后需要观察至少五分钟确认服务恢复。对于Spring Clou..."
+        }, {
+          "title" : "场景六：第三方接口故障",
+          "keywords" : [ "故障", "降级" ],
+          "file" : "sop-001/03_06_third_party_api.md",
+          "summary" : "当依赖的外部第三方接口出现超时或错误率升高时，首先确认是否为第三方服务自身故障，可通过其官方状态页面或直接联系对方技术支持确认。在确认第三方故障后，启用本地缓存兜底策略或降级方案。对于支付类接口，切换到备用支付通道。对于短信通道，切换..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-001/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-001/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-001/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-002",
+    "title" : "数据库DBA On-Call SOP",
+    "topic" : "数据库DBA",
+    "aliases" : [ "数据库", "DBA", "MySQL", "Redis", "主从延迟", "慢查询", "连接数暴涨", "备份恢复" ],
+    "originalFile" : "sop-002.html",
+    "indexFile" : "sop-002/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-002/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-002/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-002/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：主从复制中断",
+          "keywords" : [ "p0", "p1", "k8s", "主从", "ab", "SHOW", "SLAVE", "STATUS", "Binlog", "DDL", "SQL", "GTID", "SET", "GTID_NEXT" ],
+          "file" : "sop-002/03_01_replication_interruption.md",
+          "summary" : "发现主从复制中断时，首先通过SHOW SLAVE STATUS命令检查复制错误信息。常见原因包括：主库Binlog被清理导致从库找不到对应位点、DDL语句在从库执行失败、主键冲突。如果是Binlog缺失，需要使用备份重建从库。如果是个..."
+        }, {
+          "title" : "场景二：数据库连接数暴涨",
+          "keywords" : [ "p0", "p1", "异常", "数据库", "连接池", "SHOW", "PROCESSLIST", "Kill", "max_connections", "ProxySQL" ],
+          "file" : "sop-002/03_02_db_connections_spike.md",
+          "summary" : "当数据库连接数接近上限时，先通过SHOW PROCESSLIST查看当前活跃连接的分布情况，按用户、主机、命令类型统计。如果是某个应用实例异常创建大量连接，通知该应用负责人并考虑临时Kill该来源的空闲连接。如果是全局性的连接增长，检..."
+        }, {
+          "title" : "场景三：磁盘空间告急",
+          "keywords" : [ "p0", "p1", "异常", "处理", "慢查询", "ab", "Binlog", "expire_logs_days", "PURGE", "BINARY", "LOGS", "InnoDB", "OPTIMIZE", "TABLE" ],
+          "file" : "sop-002/03_03_disk_space.md",
+          "summary" : "磁盘空间使用率超过百分之八十五时需要立即处理。首先确认空间占用来源：数据文件、Binlog、慢查询日志、临时文件。如果是Binlog占用过大，检查expire_logs_days设置，必要时手动执行PURGE BINARY LOGS清..."
+        }, {
+          "title" : "场景四：大事务阻塞",
+          "keywords" : [ "沟通", "回滚", "information_schema", "innodb_trx", "SHOW", "ENGINE", "INNODB", "STATUS", "Kill", "ETL" ],
+          "file" : "sop-002/03_04_large_transaction_blocking.md",
+          "summary" : "当检测到长时间运行的大事务导致锁等待链过长时，首先通过information_schema的innodb_trx表查看当前活跃事务的持续时间和锁信息。使用SHOW ENGINE INNODB STATUS查看锁等待关系图。如果大事务来..."
+        }, {
+          "title" : "场景五：Redis内存溢出",
+          "keywords" : [ "redis", "Redis", "maxmemory", "noeviction", "INFO", "MEMORY", "DOCTOR", "redis-cli", "bigkeys", "hotkeys", "Key", "Hash", "List" ],
+          "file" : "sop-002/03_05_redis_oom.md",
+          "summary" : "Redis实例内存使用达到maxmemory限制时，根据淘汰策略的不同表现也不同。如果配置了noeviction策略，写入操作会直接报错。首先通过Redis的INFO MEMORY命令和MEMORY DOCTOR命令了解内存使用详情。..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-002/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-002/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-002/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-003",
+    "title" : "前端Web On-Call SOP",
+    "topic" : "前端Web",
+    "aliases" : [ "前端", "Web", "白屏", "JS错误", "静态资源", "CORS", "页面性能" ],
+    "originalFile" : "sop-003.html",
+    "indexFile" : "sop-003/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-003/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-003/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-003/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：白屏/页面无法加载",
+          "keywords" : [ "p0", "p1", "异常", "回滚", "监控", "指标", "白屏", "js", "cdn", "dns", "崩溃", "cd", "HTML", "CDN" ],
+          "file" : "sop-003/03_01_blank_page.md",
+          "summary" : "用户反馈页面白屏时,首先确认影响范围。通过监控平台查看白屏率指标,判断是全量用户还是部分用户受影响。如果是全量白屏,检查HTML主文档是否正常返回,CDN是否异常,DNS解析是否正确。如果是部分用户白屏,可能是JS文件加载失败,需要检..."
+        }, {
+          "title" : "场景二：JS错误率突增",
+          "keywords" : [ "p0", "p1", "告警", "js", "JS", "Sentry", "API", "Script", "error", "CORS", "ChunkLoadError" ],
+          "file" : "sop-003/03_02_js_errors.md",
+          "summary" : "Sentry告警显示JS错误数量突增时,首先在Sentry中查看新增错误的堆栈信息和影响用户数。按浏览器版本、操作系统、页面路径等维度分析错误分布。如果错误集中在某个浏览器版本,可能是兼容性问题,需要检查是否使用了该浏览器不支持的AP..."
+        }, {
+          "title" : "场景三：页面加载性能下降",
+          "keywords" : [ "p0", "p1", "响应", "排查", "监控", "指标", "延迟", "js", "LCP", "WebP", "CSS", "JS", "Lighthouse", "Chrome" ],
+          "file" : "sop-003/03_03_page_performance.md",
+          "summary" : "当LCP指标超过阈值时,通过监控平台分析性能下降的时间节点和影响范围。常见原因：一、打包体积过大,新功能引入了大量第三方库;二、图片未优化,大尺寸图片未使用WebP格式或未做懒加载;三、关键渲染路径阻塞,同步加载了非必要的CSS或JS..."
+        }, {
+          "title" : "场景四：样式错乱/布局异常",
+          "keywords" : [ "p0", "p1", "异常", "响应", "js", "cdn", "推送", "cd", "CSS", "Grid", "IE", "viewport", "CSS-in-JS", "CDN" ],
+          "file" : "sop-003/03_04_layout_issue.md",
+          "summary" : "收到样式错乱的反馈时,首先确认受影响的页面、浏览器和设备型号。检查CSS文件是否正常加载,是否存在CSS文件404的情况。如果是特定浏览器的兼容性问题,检查是否使用了该浏览器不支持的CSS属性,如CSS Grid在旧版IE中不支持。如..."
+        }, {
+          "title" : "场景五：接口跨域(CORS)错误",
+          "keywords" : [ "p0", "p1", "响应", "处理", "CORS", "Access-Control-Allow-Origin", "OPTIONS", "Nginx", "Cookie", "Access-Control-Allow-Credentials", "true", "Allow-Origin" ],
+          "file" : "sop-003/03_05_cors_error.md",
+          "summary" : "浏览器控制台出现CORS错误时,首先确认是哪个接口触发了跨域限制。检查接口服务的Access-Control-Allow-Origin响应头配置是否包含当前域名。如果是预检请求(OPTIONS)失败,检查服务端是否正确处理了OPTIO..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-003/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-003/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-003/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-004",
+    "title" : "SRE基础设施 On-Call SOP",
+    "topic" : "SRE基础设施",
+    "aliases" : [ "SRE", "基础设施", "Kubernetes", "K8s", "Etcd", "Ingress", "CI/CD", "云资源" ],
+    "originalFile" : "sop-004.html",
+    "indexFile" : "sop-004/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-004/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-004/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-004/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：Kubernetes节点NotReady",
+          "keywords" : [ "p0", "p1", "异常", "排查", "pod", "kubernetes", "Kubernetes", "NotReady", "kubectl", "describe", "node", "kubelet", "SSH", "systemd" ],
+          "file" : "sop-004/03_01_kubernetes_node_not_ready.md",
+          "summary" : "发现节点变为NotReady状态时，首先通过kubectl describe node查看节点事件和状态条件，确认是kubelet进程异常、网络不通还是资源耗尽导致。如果是kubelet异常，SSH登录节点检查kubelet服务日志和..."
+        }, {
+          "title" : "场景二：Etcd集群异常",
+          "keywords" : [ "p0", "p1", "故障", "异常", "处理", "恢复", "告警", "kubernetes", "数据库", "延迟", "cd", "Etcd", "Kubernetes", "API" ],
+          "file" : "sop-004/03_02_etcd_cluster.md",
+          "summary" : "Etcd是Kubernetes的核心组件，其故障会导致整个集群的API Server不可用。发现Etcd告警时需最高优先级处理。检查Etcd集群成员状态和Leader选举情况。常见问题包括：磁盘IO过慢导致心跳超时、数据库文件过大需要..."
+        }, {
+          "title" : "场景三：Ingress网关过载",
+          "keywords" : [ "p0", "p1", "响应", "pod", "ab", "Ingress", "Controller", "Nginx", "Envoy", "Pod", "CPU", "upstream", "Bad", "Gateway" ],
+          "file" : "sop-004/03_03_ingress_overload.md",
+          "summary" : "当Ingress Controller（Nginx Ingress或Envoy）出现大量五百错误时，首先查看Ingress Pod的资源使用率。如果是CPU或内存不足，临时增加Ingress Controller的副本数和资源限制。检..."
+        }, {
+          "title" : "场景四：CI/CD流水线大面积失败",
+          "keywords" : [ "p0", "p1", "ab", "ci", "cd", "CI/CD", "Jenkins/GitLab", "Runner", "Agent", "Docker", "Maven", "npm", "Registry", "Daemon" ],
+          "file" : "sop-004/03_04_cicd_pipeline_failure.md",
+          "summary" : "多个项目的CI/CD流水线同时失败时，首先排除基础设施层面的问题。检查Jenkins/GitLab Runner的Agent节点是否正常运行，构建节点的磁盘空间是否充足，Docker镜像仓库是否可访问。如果是依赖拉取失败，检查内部Ma..."
+        }, {
+          "title" : "场景五：云资源配额不足",
+          "keywords" : [ "p0", "p1", "监控", "pod", "kubernetes", "Kubernetes", "Pod", "vCPU", "EIP", "API" ],
+          "file" : "sop-004/03_05_cloud_quota.md",
+          "summary" : "当自动伸缩无法创建新实例或Kubernetes无法调度Pod时，可能是云资源配额耗尽。检查当前区域的实例配额、vCPU配额、EIP配额等。通过云厂商控制台或API查看配额使用情况。临时方案包括：释放闲置资源、在其他可用区创建实例、申请..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-004/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-004/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-004/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-005",
+    "title" : "信息安全 On-Call SOP",
+    "topic" : "信息安全",
+    "aliases" : [ "安全", "信息安全", "DDoS", "SQL注入", "数据泄露", "恶意软件", "权限滥用" ],
+    "originalFile" : "sop-005.html",
+    "indexFile" : "sop-005/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-005/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-005/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-005/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：DDoS攻击",
+          "keywords" : [ "p0", "p1", "监控", "ddos", "攻击", "特征", "DDoS", "SYN", "Flood", "UDP", "HTTP", "CC", "IP", "WAF" ],
+          "file" : "sop-005/03_01_ddos_attack.md",
+          "summary" : "发现DDoS攻击时，首先确认攻击类型：SYN Flood、UDP Flood、HTTP Flood还是CC攻击。通过流量分析平台查看攻击源IP分布和流量特征。第一步启用云厂商的DDoS高防服务，将流量牵引到清洗中心。对于应用层CC攻击..."
+        }, {
+          "title" : "场景二：SQL注入攻击",
+          "keywords" : [ "异常", "数据库", "攻击", "SQL", "WAF", "ORM" ],
+          "file" : "sop-005/03_02_sql_injection.md",
+          "summary" : "WAF检测到SQL注入攻击且部分请求绕过防护时，立即将受影响的接口加入WAF的严格模式规则。检查应用日志确认是否有注入成功的迹象，包括异常的数据库查询日志和异常的数据返回。如果确认注入成功，立即评估数据泄露范围，检查攻击者是否获取了敏..."
+        }, {
+          "title" : "场景三：数据泄露事件",
+          "keywords" : [ "p0", "p1", "流程", "响应", "升级", "止血", "告警", "ci", "IP", "GDPR", "CISO" ],
+          "file" : "sop-005/03_03_data_leak.md",
+          "summary" : "收到数据泄露告警或外部报告时，启动数据泄露应急响应流程。第一步：确认泄露范围，包括数据类型、数据量、受影响用户数。第二步：止血措施，封锁泄露通道（关闭相关接口、撤销泄露账号权限、封禁相关IP）。第三步：证据保全，保存相关日志、网络流量..."
+        }, {
+          "title" : "场景四：恶意软件感染",
+          "keywords" : [ "隔离", "数据库", "攻击", "EDR" ],
+          "file" : "sop-005/03_04_malware.md",
+          "summary" : "发现服务器感染恶意软件时，立即将受感染主机从网络隔离，断开其与其他服务器和数据库的连接。不要关机或重启，以保留内存中的恶意进程信息供取证分析。使用EDR工具获取恶意进程的详细信息，包括进程路径、网络连接、文件操作记录。检查同网段其他服..."
+        }, {
+          "title" : "场景五：内部权限滥用",
+          "keywords" : [ "异常", "告警", "SIEM", "HR" ],
+          "file" : "sop-005/03_05_privilege_abuse.md",
+          "summary" : "SIEM系统检测到内部用户异常操作行为时，首先确认告警的准确性，排除误报。异常行为包括：非工作时间大量访问敏感数据、短时间内批量导出数据、访问超出职责范围的系统、尝试提升自身权限。确认异常后，不要直接通知当事人，先联系其直属经理了解是..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-005/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-005/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-005/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-006",
+    "title" : "数据平台 On-Call SOP",
+    "topic" : "数据平台",
+    "aliases" : [ "数据平台", "ETL", "Spark", "Flink", "Hive", "HDFS", "Kafka集群", "数据质量" ],
+    "originalFile" : "sop-006.html",
+    "indexFile" : "sop-006/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-006/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-006/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-006/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：离线任务大面积失败",
+          "keywords" : [ "p0", "p1", "异常", "安全", "Hadoop", "YARN", "ResourceManager", "Web", "UI", "Container", "HDFS", "NameNode", "Hive", "Metastore" ],
+          "file" : "sop-006/03_01_offline_jobs_failure.md",
+          "summary" : "调度系统显示大量离线任务失败时，首先检查是否是Hadoop集群层面的问题。查看YARN ResourceManager的Web UI确认集群状态，检查是否有大量Container启动失败。常见原因包括：HDFS NameNode进入安..."
+        }, {
+          "title" : "场景二：Flink实时任务异常",
+          "keywords" : [ "p0", "p1", "异常", "处理", "恢复", "延迟", "Flink", "Checkpoint", "Dashboard", "Sink", "SubTask", "State", "Key", "Savepoint" ],
+          "file" : "sop-006/03_02_flink_job_failure.md",
+          "summary" : "Flink任务出现消费延迟持续增长或Checkpoint失败时，首先通过Flink Dashboard查看任务的运行状态和反压情况。如果是全链路反压，可能是下游Sink写入慢或数据倾斜导致某个SubTask处理不过来。通过查看各Sub..."
+        }, {
+          "title" : "场景三：HDFS存储异常",
+          "keywords" : [ "p0", "p1", "故障", "异常", "恢复", "告警", "监控", "HDFS", "NameNode", "Active/Standby", "fsck", "balancer", "Spark/MapReduce", "Hive" ],
+          "file" : "sop-006/03_03_hdfs_storage.md",
+          "summary" : "HDFS告警显示存储使用率过高或数据节点异常时，首先检查NameNode的Active/Standby状态确认高可用切换是否正常。如果是存储空间不足，通过HDFS的fsck命令检查数据分布，使用balancer进行数据均衡。清理过期的..."
+        }, {
+          "title" : "场景四：数据质量问题",
+          "keywords" : [ "异常", "处理", "告警", "监控", "指标", "质量", "ETL", "JOIN" ],
+          "file" : "sop-006/03_04_data_quality.md",
+          "summary" : "数据质量监控告警显示核心指标异常时，需要判断是数据源问题还是ETL处理问题。首先查看数据源的原始数据量和分布是否正常，再逐级检查ETL各环节的数据转换逻辑。常见的数据质量问题包括：上游系统数据格式变更导致解析失败、时区处理错误导致数据..."
+        }, {
+          "title" : "场景五：Kafka集群故障",
+          "keywords" : [ "p0", "p1", "故障", "k8s", "延迟", "kafka", "Kafka", "Broker", "Leader", "ZooKeeper", "Controller", "Partition", "ISR", "Follower" ],
+          "file" : "sop-006/03_05_kafka_cluster.md",
+          "summary" : "Kafka集群出现Broker下线或Leader选举频繁时，首先确认ZooKeeper集群的健康状态，因为Kafka依赖ZooKeeper进行元数据管理。检查Kafka Controller日志了解Leader选举原因。如果是Brok..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-006/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-006/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-006/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-007",
+    "title" : "移动客户端 On-Call SOP",
+    "topic" : "移动客户端",
+    "aliases" : [ "移动", "客户端", "App", "iOS", "Android", "崩溃率", "推送", "应用商店", "OOM", "内存泄漏" ],
+    "originalFile" : "sop-007.html",
+    "indexFile" : "sop-007/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-007/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-007/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-007/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：崩溃率突增",
+          "keywords" : [ "降级", "崩溃", "推送", "Crashlytics", "OS", "iOS", "Android", "Tinker" ],
+          "file" : "sop-007/03_01_crash_rate.md",
+          "summary" : "当某版本崩溃率超过千分之五时，首先在Crashlytics中查看新增崩溃的堆栈信息和影响用户数。按版本号、设备型号、OS版本筛选，确认是新版本引入还是旧版本也存在。如果是新版本引入的崩溃，评估是否需要紧急发布热修复版本。iOS可通过动..."
+        }, {
+          "title" : "场景二：网络请求异常",
+          "keywords" : [ "p0", "p1", "异常", "处理", "排查", "监控", "dns", "app", "App", "API", "DNS", "HttpDNS", "SSL" ],
+          "file" : "sop-007/03_02_network_request.md",
+          "summary" : "用户反馈App功能异常，排查发现是网络请求失败导致时，首先区分是客户端问题还是服务端问题。通过服务端监控确认API接口是否正常。如果服务端正常，检查是否是DNS解析问题、证书问题或网络运营商劫持。使用HttpDNS可以绕过运营商DNS..."
+        }, {
+          "title" : "场景三：内存泄漏导致OOM",
+          "keywords" : [ "oom", "崩溃", "测试", "OOM", "Crashlytics", "iOS", "UIViewController", "dealloc", "Android", "Activity", "Fragment", "Handler", "Context", "LeakCanary" ],
+          "file" : "sop-007/03_03_mobile_oom.md",
+          "summary" : "线上OOM崩溃数量增加时，通过Crashlytics分析崩溃时的内存状态和崩溃堆栈。iOS端关注UIViewController的dealloc是否被正确调用，检查是否存在循环引用。Android端关注Activity和Fragmen..."
+        }, {
+          "title" : "场景四：推送服务异常",
+          "keywords" : [ "p0", "p1", "异常", "推送", "APNs", "iOS", "FCM/", "Android", "Token", "Google", "OPPO", "vivo", "Kill" ],
+          "file" : "sop-007/03_04_push_service.md",
+          "summary" : "用户反馈收不到推送通知时，首先区分是全量问题还是个别用户问题。全量推送失败通常是推送服务本身的问题：检查APNs（iOS）和FCM/厂商推送通道（Android）的服务状态。确认推送证书是否过期、推送Token是否有效。对于Andro..."
+        }, {
+          "title" : "场景五：应用商店审核被拒",
+          "keywords" : [ "p0", "p1", "流程", "沟通", "app", "Apple", "Google", "API", "App", "Store", "Connect", "Play", "bug" ],
+          "file" : "sop-007/03_05_app_store_review.md",
+          "summary" : "新版本提交审核被Apple或Google拒绝时，首先仔细阅读拒绝理由。常见被拒原因包括：隐私政策不完善、使用了被禁止的私有API、应用内支付未使用平台指定的支付方式、描述与实际功能不符。对于Apple的审核，可通过App Store ..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-007/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-007/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-007/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-008",
+    "title" : "AI算法 On-Call SOP",
+    "topic" : "AI算法",
+    "aliases" : [ "AI算法", "算法", "模型", "推荐", "搜索", "特征", "AB实验", "GPU", "推荐质量下降" ],
+    "originalFile" : "sop-008.html",
+    "indexFile" : "sop-008/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-008/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-008/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-008/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：模型推理延迟突增",
+          "keywords" : [ "p0", "p1", "故障", "异常", "回滚", "降级", "pod", "延迟", "模型", "特征", "gpu", "推理", "测试", "GPU" ],
+          "file" : "sop-008/03_01_inference_latency.md",
+          "summary" : "当模型推理延迟超过阈值时，首先确认是单模型问题还是全局性问题。检查GPU集群状态，确认是否有GPU卡故障或CUDA驱动异常。如果是单模型延迟增长，检查该模型的输入数据是否异常（如特征维度突变、batch size变化）。检查模型服务的..."
+        }, {
+          "title" : "场景二：模型效果下降",
+          "keywords" : [ "异常", "排查", "回滚", "监控", "指标", "延迟", "模型", "推荐", "搜索", "点击率", "相关性", "效果下降", "特征", "召回" ],
+          "file" : "sop-008/03_02_model_quality_drop.md",
+          "summary" : "业务指标监控显示推荐点击率或搜索相关性下降时，首先排除流量波动导致的统计偏差。确认样本量是否足够做出可靠判断。如果确认效果下降，检查以下因素：一、是否有新模型上线导致（检查AB实验结果）；二、特征数据是否正常（特征缺失、延迟、分布变化..."
+        }, {
+          "title" : "场景三：GPU集群资源不足",
+          "keywords" : [ "p0", "p1", "处理", "监控", "模型", "实验", "gpu", "推理", "GPU", "nvidia-smi", "DCGM", "INT8/FP16", "Triton", "Inference" ],
+          "file" : "sop-008/03_03_gpu_resource.md",
+          "summary" : "当GPU资源紧张导致模型服务无法扩容或新模型无法部署时，首先统计各服务的GPU使用效率。通过nvidia-smi和DCGM监控查看各GPU卡的实际利用率，找出利用率低于百分之三十的服务进行资源回收或合并部署。对于推理服务，可以通过模型..."
+        }, {
+          "title" : "场景四：特征服务故障",
+          "keywords" : [ "故障", "异常", "降级", "监控", "数据库", "延迟", "redis", "模型", "效果下降", "特征", "推理", "Feature", "Store", "Redis" ],
+          "file" : "sop-008/03_04_feature_service.md",
+          "summary" : "特征服务（Feature Store）不可用或延迟过高时，模型推理会使用默认特征值或缓存的旧特征，导致效果下降但不会完全不可用。首先确认特征服务的基础依赖（Redis集群、在线特征数据库）是否正常。如果是Redis热Key问题导致部分..."
+        }, {
+          "title" : "场景五：AB实验异常",
+          "keywords" : [ "故障", "异常", "指标", "模型", "特征", "ab", "实验", "AB" ],
+          "file" : "sop-008/03_05_ab_experiment.md",
+          "summary" : "AB实验平台出现流量分配异常或实验指标不可信时，首先检查实验配置是否正确，包括流量比例、用户分桶规则、实验互斥和分层设置。如果是流量分配倾斜，检查分桶哈希函数的均匀性。如果是指标异常，检查数据采集链路是否正常、实验组和对照组的样本量是..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-008/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-008/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-008/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-009",
+    "title" : "QA质量保障 On-Call SOP",
+    "topic" : "QA质量保障",
+    "aliases" : [ "QA", "质量保障", "测试", "自动化测试", "测试环境", "性能测试", "线上Bug" ],
+    "originalFile" : "sop-009.html",
+    "indexFile" : "sop-009/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-009/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-009/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-009/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一：自动化测试大面积失败",
+          "keywords" : [ "恢复", "数据库", "测试", "Selenium", "Grid", "Mock", "Flaky", "Test" ],
+          "file" : "sop-009/03_01_automated_tests_failure.md",
+          "summary" : "持续集成流水线中自动化测试大面积失败时，首先区分是测试环境问题还是被测服务问题。检查测试环境的基础设施状态：Selenium Grid的节点是否正常、测试数据库是否可用、Mock服务是否正常运行。如果是测试环境本身的问题，优先恢复环境..."
+        }, {
+          "title" : "场景二：测试环境不可用",
+          "keywords" : [ "处理", "恢复", "kubernetes", "数据库", "测试", "Kubernetes", "DBA", "Feature", "Branch" ],
+          "file" : "sop-009/03_02_test_env_unavailable.md",
+          "summary" : "测试环境服务全部或部分不可用时，会直接影响开发和测试团队的工作效率。首先通过环境管理平台确认各服务的部署状态和健康检查结果。常见原因包括：共享测试数据库被锁表导致全部服务超时、某个团队的部署操作影响了共享组件、测试环境的Kuberne..."
+        }, {
+          "title" : "场景三：性能测试环境异常",
+          "keywords" : [ "异常", "隔离", "数据库", "测试", "JMeter", "Gatling" ],
+          "file" : "sop-009/03_03_performance_test_env.md",
+          "summary" : "性能测试集群出现异常时，可能影响正在进行的性能测试任务的准确性。检查JMeter或Gatling压测节点的资源使用率，确认压测工具本身是否成为瓶颈。检查被测环境的配置是否与生产一致，包括实例数、资源配额、数据库规格等。性能测试结果不准..."
+        }, {
+          "title" : "场景四：测试数据问题",
+          "keywords" : [ "故障", "恢复", "数据库", "安全", "测试" ],
+          "file" : "sop-009/03_04_test_data.md",
+          "summary" : "测试数据不可用或被污染时，会导致大量测试用例执行失败。测试数据问题包括：数据工厂生成数据失败、共享测试账号被其他测试用例修改、测试数据库数据被误删、敏感数据脱敏不完整。首先通过测试数据管理平台检查数据生成任务的执行日志。如果是数据工厂..."
+        }, {
+          "title" : "场景五：线上Bug紧急验证",
+          "keywords" : [ "流程", "测试", "Bug", "QA" ],
+          "file" : "sop-009/03_05_online_bug_verification.md",
+          "summary" : "生产环境发现紧急Bug需要QA快速验证修复时，值班QA需配合开发团队完成验证流程。首先在测试环境复现Bug，确认复现路径和条件。开发提交修复代码后，在预发布环境进行修复验证，验证内容包括：Bug是否被修复、修复是否引入新问题（回归测试..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-009/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-009/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-009/06_commands.md"
+      }
+    }
+  }, {
+    "id" : "sop-010",
+    "title" : "网络&CDN On-Call SOP",
+    "topic" : "网络&CDN",
+    "aliases" : [ "网络", "CDN", "DNS", "负载均衡", "BGP", "跨区域网络", "带宽" ],
+    "originalFile" : "sop-010.html",
+    "indexFile" : "sop-010/index.json",
+    "sections" : {
+      "duties" : {
+        "title" : "一、值班职责",
+        "file" : "sop-010/01_duties.md"
+      },
+      "metrics" : {
+        "title" : "二、监控指标",
+        "file" : "sop-010/02_metrics.md"
+      },
+      "troubleshooting" : {
+        "indexFile" : "sop-010/03_troubleshooting.index.md",
+        "scenarios" : [ {
+          "title" : "场景一:CDN节点故障",
+          "keywords" : [ "故障", "异常", "告警", "监控", "指标", "cdn", "dns", "cd", "CDN", "DNS" ],
+          "file" : "sop-010/03_01_cdn_node.md",
+          "summary" : "CDN监控告警显示某区域节点异常时,首先通过CDN控制台确认故障节点的具体位置和影响范围.检查该节点的服务状态&磁盘健康&网络连通性.如果是单节点故障,CDN系统通常会自动将流量调度到其他可用节点,需确认流量切换是否成功.如果是区域性..."
+        }, {
+          "title" : "场景二:DNS解析异常",
+          "keywords" : [ "p0", "p1", "故障", "异常", "dns", "DNS", "Route53", "CloudFlare", "DNSSEC", "TTL", "HttpDNS", "IP", "fallback" ],
+          "file" : "sop-010/03_02_dns_resolution.md",
+          "summary" : "DNS解析失败或解析结果错误时,影响范围极广,所有依赖域名访问的服务都会受影响.首先确认是权威DNS还是递归DNS的问题.如果是权威DNS（如Route53&CloudFlare）故障,检查DNS记录配置是否被误改,确认DNSSEC签..."
+        }, {
+          "title" : "场景三:跨区域网络延迟",
+          "keywords" : [ "p0", "p1", "故障", "延迟", "MTR", "Traceroute", "IDC", "VPN", "AWS" ],
+          "file" : "sop-010/03_03_cross_region_latency.md",
+          "summary" : "跨区域服务访问延迟增大时,首先通过网络探测工具（MTR&Traceroute）确认延迟发生在哪一跳.如果是运营商骨干网络拥塞,短期内无法解决,需要调整流量调度策略,将流量切换到延迟更低的线路.对于使用专线连接的IDC间通信,检查专线的..."
+        }, {
+          "title" : "场景四:负载均衡器故障",
+          "keywords" : [ "p0", "p1", "故障", "异常", "回滚", "推送", "LB", "ALB", "CLB", "Nginx", "HAProxy", "upstream" ],
+          "file" : "sop-010/03_04_load_balancer.md",
+          "summary" : "负载均衡器（LB）异常会导致其后端的所有服务不可访问.首先确认LB自身的健康状态:如果是云LB（如ALB&CLB）,检查云厂商是否有公告.如果是自建LB（Nginx&HAProxy）,检查进程状态&配置文件语法&upstream健康检..."
+        }, {
+          "title" : "场景五:DDoS攻击导致带宽打满",
+          "keywords" : [ "p0", "p1", "异常", "监控", "dns", "ddos", "安全", "攻击", "特征", "DDoS", "IP", "UDP", "Flood", "SYN" ],
+          "file" : "sop-010/03_05_bandwidth_ddos.md",
+          "summary" : "网络监控显示入方向流量异常暴涨时,首先判断是否为DDoS攻击.通过流量分析工具查看流量来源IP分布&协议分布&包大小分布.确认攻击类型:UDP Flood&SYN Flood&HTTP Flood&DNS反射攻击等.第一步:启用云厂商..."
+        } ],
+        "title" : "三、常见故障处理"
+      },
+      "escalation" : {
+        "title" : "四、升级流程",
+        "file" : "sop-010/04_escalation.md"
+      },
+      "forbidden" : {
+        "title" : "五、禁止操作",
+        "file" : "sop-010/05_forbidden.md"
+      },
+      "commands" : {
+        "title" : "六、工具与命令参考",
+        "file" : "sop-010/06_commands.md"
+      }
+    }
+  } ]
+}

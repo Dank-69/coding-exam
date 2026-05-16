@@ -59,7 +59,8 @@ class Phase3ControllerTest {
         JsonNode root = chatJson("服务 OOM 了怎么办");
         assertThat(root.path("toolCalls")).isNotEmpty();
         assertThat(root.path("toolCalls").get(0).path("tool").asText()).isEqualTo("readFile");
-        assertThat(root.path("toolCalls").get(0).path("args").path("filename").asText()).isEqualTo("sop-001.html");
+        assertThat(toolFilenames(root))
+                .contains("sop_index.json", "sop-001/index.json", "sop-001/03_02_oom.md");
         assertThat(root.path("answer").asText()).contains("sop-001");
     }
 
@@ -74,13 +75,15 @@ class Phase3ControllerTest {
     @Test
     void securityQuestion_shouldReadSop005() throws Exception {
         JsonNode root = chatJson("怀疑有人入侵了系统");
-        assertThat(root.path("toolCalls").get(0).path("args").path("filename").asText()).isEqualTo("sop-005.html");
+        assertThat(toolFilenames(root))
+                .contains("sop_index.json", "sop-005/index.json", "sop-005/03_troubleshooting.index.md");
     }
 
     @Test
     void aiQuestion_shouldReadSop008() throws Exception {
         JsonNode root = chatJson("推荐结果质量下降了");
-        assertThat(root.path("toolCalls").get(0).path("args").path("filename").asText()).isEqualTo("sop-008.html");
+        assertThat(toolFilenames(root))
+                .contains("sop_index.json", "sop-008/index.json", "sop-008/03_02_model_quality_drop.md");
     }
 
     @Test
@@ -120,5 +123,13 @@ class Phase3ControllerTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    private List<String> toolFilenames(JsonNode root) {
+        List<String> filenames = new ArrayList<>();
+        for (JsonNode toolCall : root.path("toolCalls")) {
+            filenames.add(toolCall.path("args").path("filename").asText());
+        }
+        return filenames;
     }
 }

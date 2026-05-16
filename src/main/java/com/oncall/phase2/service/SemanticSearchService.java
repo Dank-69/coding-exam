@@ -145,6 +145,14 @@ public class SemanticSearchService {
         }
     }
 
+    public boolean canWarmUpVectors() {
+        return embeddingClient.isEnabled();
+    }
+
+    public String vectorWarmUpDisabledReason() {
+        return embeddingClient.disabledReason();
+    }
+
     private List<SearchResult> fallbackSearch(String query) {
         log.info("v2 semantic search local fallback q='{}'", logQuery(query));
         String normalizedQuery = normalize(query);

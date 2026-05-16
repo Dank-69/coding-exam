@@ -1,0 +1,3 @@
+# 场景三：Ingress网关过载
+
+当Ingress Controller（Nginx Ingress或Envoy）出现大量五百错误时，首先查看Ingress Pod的资源使用率。如果是CPU或内存不足，临时增加Ingress Controller的副本数和资源限制。检查是否有突发流量导致连接数暴涨，查看upstream的连接和响应时间分布。如果是后端服务响应慢导致Ingress连接堆积，需要配置合理的超时时间和重试策略。对于频繁出现的五百二错误（Bad Gateway），检查后端Service的Endpoint是否正常。对于五百三错误（Service Unavailable），确认后端Pod是否处于就绪状态。

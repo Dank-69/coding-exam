@@ -1,0 +1,3 @@
+# 六、工具与命令参考
+
+安全运维工具集：SIEM平台使用Splunk，集中管理所有安全日志和告警规则。WAF管理使用内部WAF控制台，支持规则配置和攻击分析。漏洞扫描使用Nessus和OWASP ZAP。渗透测试使用Burp Suite和Metasploit（仅限授权测试）。EDR终端检测使用CrowdStrike。密钥管理使用HashiCorp Vault。证书管理使用内部PKI平台。威胁情报使用MISP平台，与行业共享威胁指标。代码安全扫描使用SonarQube和Checkmarx集成到CI/CD流水线中。 本文档由信息安全团队维护，如有疑问请联系：security-oncall@company.com

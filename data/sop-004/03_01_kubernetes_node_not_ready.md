@@ -1,0 +1,3 @@
+# 场景一：Kubernetes节点NotReady
+
+发现节点变为NotReady状态时，首先通过kubectl describe node查看节点事件和状态条件，确认是kubelet进程异常、网络不通还是资源耗尽导致。如果是kubelet异常，SSH登录节点检查kubelet服务日志和systemd状态。如果是内存或磁盘压力导致，节点会进入MemoryPressure或DiskPressure状态，需要驱逐非核心Pod释放资源。对于频繁NotReady的节点，应先将其标记为不可调度（cordon），迁移上面的Pod到其他节点后再排查根因。如果是底层虚拟机问题，联系云厂商进行实例迁移。

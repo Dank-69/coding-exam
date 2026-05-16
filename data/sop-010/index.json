@@ -1,0 +1,46 @@
+{
+  "id" : "sop-010",
+  "filename" : "sop-010.html",
+  "title" : "网络&CDN On-Call SOP",
+  "sourceHash" : "e883b0a36f2d9029f09e89e52690ffa39bfb706196000364974fde76de953394",
+  "parserVersion" : "sop-section-parser-v2",
+  "generatedAt" : "2026-05-15T16:25:28.077534400Z",
+  "indexFile" : "sop-010/index.json",
+  "dutyFile" : "sop-010/01_duties.md",
+  "duty" : "网络&CDN值班工程师负责保障公司全部网络基础设施和CDN加速服务的稳定运行.值班范围包括:IDC机房网络&云上VPC网络&跨区域专线&CDN加速节点&DNS解析服务&四层&七层负载均衡.值班人员需二十四小时响应网络告警,因为网络故障通常影响面最广,几乎所有上层服务都依赖网络的正常运行.值班周期为每周轮换,交接时需确认网络设备的健康状态&CDN回源率趋势&DNS解析成功率&以及正在进行的网络变更计划.值班人员应持有CCNP或同等网络认证,熟悉BGP&OSPF等路由协议,以及Nginx&HAProxy等负载均衡软件的配置管理.",
+  "metricsFile" : "sop-010/02_metrics.md",
+  "metrics" : "网络&CDN监控体系覆盖四大领域.网络基础设施:核心交换机&路由器的CPU&内存使用率,接口流量&错误包&丢包率,BGP邻居状态&路由表变化.丢包率超过千分之一触发告警.CDN服务:CDN节点的命中率需维持在百分之九十五以上,回源带宽不超过总带宽的百分之三十,CDN节点的五百错误率不超过千分之一.DNS服务:DNS解析成功率需在百分之九十九点九九以上,解析延迟P95需控制在五十毫秒以内,DNS查询QPS监控.负载均衡:LB的连接数&每秒新建连接数&活跃连接数&后端健康检查状态.所有网络设备通过SNMP&NetFlow采集数据,CDN监控通过CDN厂商API和自建探测节点采集,统一在Grafana展示.",
+  "troubleshootingIndexFile" : "sop-010/03_troubleshooting.index.md",
+  "scenarios" : [ {
+    "name" : "场景一:CDN节点故障",
+    "file" : "sop-010/03_01_cdn_node.md",
+    "content" : "CDN监控告警显示某区域节点异常时,首先通过CDN控制台确认故障节点的具体位置和影响范围.检查该节点的服务状态&磁盘健康&网络连通性.如果是单节点故障,CDN系统通常会自动将流量调度到其他可用节点,需确认流量切换是否成功.如果是区域性故障,可能影响该区域的所有用户,需要手动调整DNS调度策略,将流量牵引到其他区域的节点.CDN缓存命中率突然下降时,检查是否有大量缓存被刷新&回源策略是否变更&或者新上线的资源未做预热.对于视频&直播类CDN,还需关注首帧时间和卡顿率指标.",
+    "keywords" : [ "故障", "异常", "告警", "监控", "指标", "cdn", "dns", "cd", "CDN", "DNS" ]
+  }, {
+    "name" : "场景二:DNS解析异常",
+    "file" : "sop-010/03_02_dns_resolution.md",
+    "content" : "DNS解析失败或解析结果错误时,影响范围极广,所有依赖域名访问的服务都会受影响.首先确认是权威DNS还是递归DNS的问题.如果是权威DNS（如Route53&CloudFlare）故障,检查DNS记录配置是否被误改,确认DNSSEC签名是否有效.如果是递归DNS缓存了错误的记录,需要等待TTL过期或请求上游运营商刷新缓存.DNS劫持是另一个常见问题,通过多地域DNS探测确认解析结果的一致性.紧急方案:使用HttpDNS绕过传统DNS解析,或者在客户端和服务端配置IP直连的fallback机制.DNS变更操作需格外谨慎,错误的DNS记录修改可能导致全站不可访问.",
+    "keywords" : [ "p0", "p1", "故障", "异常", "dns", "DNS", "Route53", "CloudFlare", "DNSSEC", "TTL", "HttpDNS", "IP", "fallback" ]
+  }, {
+    "name" : "场景三:跨区域网络延迟",
+    "file" : "sop-010/03_03_cross_region_latency.md",
+    "content" : "跨区域服务访问延迟增大时,首先通过网络探测工具（MTR&Traceroute）确认延迟发生在哪一跳.如果是运营商骨干网络拥塞,短期内无法解决,需要调整流量调度策略,将流量切换到延迟更低的线路.对于使用专线连接的IDC间通信,检查专线的带宽利用率和误码率.如果专线故障,切换到备用线路或VPN通道.跨云区域（如阿里云华北到AWS东南亚）的延迟问题,需要评估是否启用云厂商的全球加速服务.长期优化方案包括:部署就近接入节点&优化数据同步策略减少跨区域调用&使用边缘计算减少回源.",
+    "keywords" : [ "p0", "p1", "故障", "延迟", "MTR", "Traceroute", "IDC", "VPN", "AWS" ]
+  }, {
+    "name" : "场景四:负载均衡器故障",
+    "file" : "sop-010/03_04_load_balancer.md",
+    "content" : "负载均衡器（LB）异常会导致其后端的所有服务不可访问.首先确认LB自身的健康状态:如果是云LB（如ALB&CLB）,检查云厂商是否有公告.如果是自建LB（Nginx&HAProxy）,检查进程状态&配置文件语法&upstream健康检查结果.LB返回五百二错误通常意味着后端服务全部不可用,需要检查后端实例的健康状态.LB连接数达到上限时,需要紧急扩容或优化连接复用配置.对于四层LB的会话保持问题,检查连接超时设置是否合理.LB配置变更导致故障时,立即回滚到上一个配置版本.生产LB的配置变更必须通过灰度发布机制,先在部分节点生效确认无误后再全量推送.",
+    "keywords" : [ "p0", "p1", "故障", "异常", "回滚", "推送", "LB", "ALB", "CLB", "Nginx", "HAProxy", "upstream" ]
+  }, {
+    "name" : "场景五:DDoS攻击导致带宽打满",
+    "file" : "sop-010/03_05_bandwidth_ddos.md",
+    "content" : "网络监控显示入方向流量异常暴涨时,首先判断是否为DDoS攻击.通过流量分析工具查看流量来源IP分布&协议分布&包大小分布.确认攻击类型:UDP Flood&SYN Flood&HTTP Flood&DNS反射攻击等.第一步:启用云厂商的DDoS防护服务,将流量牵引到清洗中心.第二步:在边界路由器或防火墙配置ACL规则过滤明显的攻击流量.第三步:如果攻击流量超过接入带宽,联系上游运营商在骨干网层面进行流量清洗.攻击期间需密切监控业务可用性,确保防护策略不会误杀正常流量.记录攻击特征&持续时间&峰值流量等信息,用于后续的防护策略优化和安全事件报告.",
+    "keywords" : [ "p0", "p1", "异常", "监控", "dns", "ddos", "安全", "攻击", "特征", "DDoS", "IP", "UDP", "Flood", "SYN" ]
+  } ],
+  "escalationFile" : "sop-010/04_escalation.md",
+  "escalation" : "网络&CDN值班遇到以下情况需立即升级:一&核心机房网络完全中断;二&DNS全局解析故障;三&CDN大面积节点故障影响超过百分之三十的用户;四&大规模DDoS攻击超过防护带宽.升级路径:值班网络工程师→网络团队负责人→基础架构VP.网络故障通常是P0级别,因为几乎所有服务都依赖网络,需在三分钟内升级.",
+  "forbiddenFile" : "sop-010/05_forbidden.md",
+  "forbidden" : "以下操作严格禁止:一&在业务高峰期变更核心交换机或路由器配置;二&未经确认直接修改生产DNS记录;三&在未通知业务方的情况下刷新CDN全部缓存;四&手动修改BGP路由宣告而不通知上下游;五&在生产LB上直接测试新配置;六&关闭DDoS防护服务进行所谓的\"性能测试\";七&使用未授权的网络扫描工具对生产网络进行扫描.",
+  "commandsFile" : "sop-010/06_commands.md",
+  "commands" : "网络&CDN运维工具集:网络监控使用Zabbix&LibreNMS采集设备指标,NetFlow分析使用nTop.CDN管理使用各CDN厂商控制台,多CDN调度使用自研DNS调度平台.DNS管理使用PowerDNS Admin和云厂商DNS控制台.网络探测使用MTR&Traceroute&SmokePing进行链路质量检测.负载均衡管理使用Nginx Plus Dashboard和HAProxy Stats.DDoS防护使用云厂商高防服务和自建清洗中心.网络拓扑可视化使用NetBox.配置备份使用Oxidized自动备份网络设备配置.抓包分析使用Wireshark和tcpdump. 本文档由网络&CDN团队维护,如有疑问请联系:network-oncall@company.com"
+}

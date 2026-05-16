@@ -1,0 +1,3 @@
+# 场景二：Flink实时任务异常
+
+Flink任务出现消费延迟持续增长或Checkpoint失败时，首先通过Flink Dashboard查看任务的运行状态和反压情况。如果是全链路反压，可能是下游Sink写入慢或数据倾斜导致某个SubTask处理不过来。通过查看各SubTask的处理速率定位瓶颈。Checkpoint失败通常与State过大有关，检查State的大小趋势和Checkpoint超时设置。对于数据倾斜问题，临时方案是增加并行度或调整Key的分布。如果任务完全失败需要重启，确认从最近的Checkpoint或Savepoint恢复，避免数据丢失或重复消费。重启后需验证数据一致性。

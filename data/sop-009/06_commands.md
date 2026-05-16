@@ -1,0 +1,3 @@
+# 六、工具与命令参考
+
+QA运维工具集：自动化测试框架使用Selenium WebDriver和Appium（移动端），接口测试使用RestAssured和Postman。测试管理使用TestRail和自研质量平台。持续集成使用Jenkins和GitLab CI，测试阶段集成在发布流水线中。性能测试使用JMeter和Gatling，分布式压测使用自研压测平台。Mock服务使用WireMock和自研Mock平台。测试数据管理使用自研数据工厂。缺陷跟踪使用Jira。环境管理使用自研环境管理平台，支持一键创建和销毁Feature Branch环境。代码覆盖率使用JaCoCo和Istanbul。 本文档由QA质量保障团队维护，如有疑问请联系：qa-oncall@company.com

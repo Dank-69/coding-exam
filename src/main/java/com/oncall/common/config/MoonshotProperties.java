@@ -4,16 +4,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "moonshot")
 public class MoonshotProperties {
-    private String provider;
-    private String baseUrl;
+    private String provider = "moonshot";
+    private String baseUrl = "https://api.moonshot.cn/v1";
     private String apiKey;
     private String embeddingProvider;
     private String embeddingBaseUrl;
     private String embeddingApiKey;
     private String embeddingModel;
-    private String chatModel;
+    private String chatModel = "kimi-k2.6";
     private boolean embeddingsEnabled = true;
-    private int requestTimeoutSeconds = 20;
+    private int requestTimeoutSeconds = 60;
     private int maxToolRounds = 4;
 
     public String provider() { return provider; }

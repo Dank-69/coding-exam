@@ -1,6 +1,7 @@
 package com.oncall.common.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import java.io.IOException;
 import java.time.Instant;
 
 @RestControllerAdvice
@@ -39,6 +41,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), "EXTERNAL_SERVICE_UNAVAILABLE");
     }
 
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<Void> handleIo(IOException ex) {
+        if (isClientDisconnect(ex)) {
+            log.info("Client disconnected while streaming response: {}", ex.getMessage());
+            return ResponseEntity.status(HttpStatusCode.valueOf(499)).build();
+        }
+        log.warn("I/O error while writing response: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnknown(Exception ex) {
         log.error("Unhandled exception", ex);
@@ -47,5 +59,21 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiError> build(HttpStatus status, String message, String code) {
         return ResponseEntity.status(status).body(new ApiError(message, code, Instant.now().toString()));
+    }
+
+    private boolean isClientDisconnect(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            String className = current.getClass().getName();
+            String message = current.getMessage() == null ? "" : current.getMessage().toLowerCase();
+            if (className.contains("ClientAbortException")
+                    || message.contains("broken pipe")
+                    || message.contains("connection reset")
+                    || message.contains("你的主机中的软件中止")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

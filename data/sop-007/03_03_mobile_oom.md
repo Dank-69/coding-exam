@@ -1,0 +1,3 @@
+# 场景三：内存泄漏导致OOM
+
+线上OOM崩溃数量增加时，通过Crashlytics分析崩溃时的内存状态和崩溃堆栈。iOS端关注UIViewController的dealloc是否被正确调用，检查是否存在循环引用。Android端关注Activity和Fragment的泄漏，常见原因包括：匿名内部类持有Activity引用、Handler消息未清理、静态变量持有Context。使用LeakCanary（Android）或Instruments（iOS）在测试环境复现和定位泄漏。紧急缓解方案：通过远程配置降低图片缓存大小、减少预加载内容、关闭非核心的后台任务。对于已发布版本的内存问题，需要通过热修复或紧急版本修复。

@@ -1,7 +1,10 @@
 package com.oncall.phase3.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oncall.phase3.model.AgentChatRequest;
 import com.oncall.phase3.model.AgentChatResponse;
+import com.oncall.phase3.model.AgentMessage;
 import com.oncall.phase3.model.AgentTraceEvent;
 import com.oncall.phase3.service.AgentService;
 import org.slf4j.Logger;
@@ -28,9 +31,11 @@ import java.util.concurrent.CompletableFuture;
 public class Phase3Controller {
     private static final Logger log = LoggerFactory.getLogger(Phase3Controller.class);
     private final AgentService agentService;
+    private final ObjectMapper objectMapper;
 
-    public Phase3Controller(AgentService agentService) {
+    public Phase3Controller(AgentService agentService, ObjectMapper objectMapper) {
         this.agentService = agentService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -42,14 +47,31 @@ public class Phase3Controller {
 
     @GetMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ResponseBody
-    public Flux<ServerSentEvent<String>> chatStream(@RequestParam("message") String message) {
+    public Flux<ServerSentEvent<String>> chatStream(
+            @RequestParam("message") String message,
+            @RequestParam(name = "history", required = false) String historyJson
+    ) {
+        return streamChat("GET /v3/chat", message, parseHistory(historyJson));
+    }
+
+    @PostMapping(value = "/chat/stream", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @ResponseBody
+    public Flux<ServerSentEvent<String>> chatStreamPost(@RequestBody AgentChatRequest request) {
+        return streamChat(
+                "POST /v3/chat/stream",
+                request.message(),
+                request.history() == null ? List.of() : request.history()
+        );
+    }
+
+    private Flux<ServerSentEvent<String>> streamChat(String route, String message, List<AgentMessage> history) {
         long start = System.currentTimeMillis();
         String logQuery = logMessage(message);
-        log.info("GET /v3/chat stream start q='{}'", logQuery);
+        log.info("{} stream start q='{}' history={}", route, logQuery, history.size());
         return Flux.<AgentTraceEvent>create(fluxSink -> {
             CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
                 try {
-                    agentService.chat(message, List.of(), event -> {
+                    agentService.chat(message, history, event -> {
                         if (!fluxSink.isCancelled()) {
                             fluxSink.next(event);
                         }
@@ -67,8 +89,8 @@ public class Phase3Controller {
             });
             fluxSink.onCancel(() -> task.cancel(true));
         })
-                .doFinally(signalType -> log.info("GET /v3/chat stream end q='{}' signal={} took={}ms",
-                        logQuery, signalType, System.currentTimeMillis() - start))
+                .doFinally(signalType -> log.info("{} stream end q='{}' signal={} took={}ms",
+                        route, logQuery, signalType, System.currentTimeMillis() - start))
                 .map(this::toSseEvent);
     }
 
@@ -99,6 +121,22 @@ public class Phase3Controller {
 
     private int toolCallCount(AgentChatResponse response) {
         return response.toolCalls() == null ? 0 : response.toolCalls().size();
+    }
+
+    private List<AgentMessage> parseHistory(String historyJson) {
+        if (historyJson == null || historyJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<AgentMessage> parsed = objectMapper.readValue(
+                    historyJson,
+                    new TypeReference<List<AgentMessage>>() { }
+            );
+            return parsed == null ? List.of() : parsed;
+        } catch (Exception ex) {
+            log.warn("GET /v3/chat ignored invalid history payload reason={}", ex.getMessage());
+            return List.of();
+        }
     }
 
     private String logMessage(String value) {

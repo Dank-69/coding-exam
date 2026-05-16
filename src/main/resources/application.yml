@@ -13,9 +13,9 @@ moonshot:
   embedding-base-url: ${AI_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
   embedding-api-key: ${AI_EMBEDDING_API_KEY:}
   embedding-model: ${AI_EMBEDDING_MODEL:text-embedding-v3}
-  chat-model: ${AI_CHAT_MODEL:${MOONSHOT_CHAT_MODEL:moonshot-v1-8k}}
+  chat-model: ${AI_CHAT_MODEL:${MOONSHOT_CHAT_MODEL:kimi-k2.6}}
   embeddings-enabled: ${AI_EMBEDDINGS_ENABLED:true}
-  request-timeout-seconds: ${AI_TIMEOUT_SECONDS:${MOONSHOT_TIMEOUT_SECONDS:20}}
+  request-timeout-seconds: ${AI_TIMEOUT_SECONDS:${MOONSHOT_TIMEOUT_SECONDS:60}}
   max-tool-rounds: ${AI_MAX_TOOL_ROUNDS:${MOONSHOT_MAX_TOOL_ROUNDS:4}}
 
 logging:
@@ -27,6 +27,13 @@ oncall:
   bootstrap:
     enabled: ${ONCALL_BOOTSTRAP_ENABLED:true}
     data-dir: ${ONCALL_BOOTSTRAP_DATA_DIR:data}
+    sync-enabled: ${ONCALL_BOOTSTRAP_SYNC_ENABLED:true}
+    sync-initial-delay-ms: ${ONCALL_BOOTSTRAP_SYNC_INITIAL_DELAY_MS:30000}
+    sync-fixed-delay-ms: ${ONCALL_BOOTSTRAP_SYNC_FIXED_DELAY_MS:30000}
   phase2:
     vector-warmup:
-      enabled: ${ONCALL_V2_VECTOR_WARMUP_ENABLED:false}
+      enabled: ${ONCALL_V2_VECTOR_WARMUP_ENABLED:true}
+  phase3:
+    sop-index:
+      enabled: ${ONCALL_V3_SOP_INDEX_ENABLED:true}
+      dir: ${ONCALL_V3_SOP_INDEX_DIR:data}

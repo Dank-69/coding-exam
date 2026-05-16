@@ -1,0 +1,3 @@
+# 六、工具与命令参考
+
+网络&CDN运维工具集:网络监控使用Zabbix&LibreNMS采集设备指标,NetFlow分析使用nTop.CDN管理使用各CDN厂商控制台,多CDN调度使用自研DNS调度平台.DNS管理使用PowerDNS Admin和云厂商DNS控制台.网络探测使用MTR&Traceroute&SmokePing进行链路质量检测.负载均衡管理使用Nginx Plus Dashboard和HAProxy Stats.DDoS防护使用云厂商高防服务和自建清洗中心.网络拓扑可视化使用NetBox.配置备份使用Oxidized自动备份网络设备配置.抓包分析使用Wireshark和tcpdump. 本文档由网络&CDN团队维护,如有疑问请联系:network-oncall@company.com

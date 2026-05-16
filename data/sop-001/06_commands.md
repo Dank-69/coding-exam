@@ -1,0 +1,3 @@
+# 六、工具与命令参考
+
+日常排查常用工具列表如下。日志查询使用Kibana，地址为内部日志平台，支持按TraceID检索全链路日志。服务管理使用kubectl命令，常用操作包括查看Pod状态、查看日志、重启Deployment等。性能分析使用Arthas，可在线诊断Java应用的CPU和内存问题。流量管理使用Sentinel控制台，可实时调整限流和熔断规则。配置管理使用Apollo控制台，所有配置变更需通过审批流程。监控大盘使用Grafana，按服务维度和业务维度分别配置。告警管理使用AlertManager和PagerDuty，确保告警能及时推送到值班人员。链路追踪使用SkyWalking或Jaeger，可追踪跨服务调用链路。 本文档由后端架构组维护，如有疑问请联系：backend-oncall@company.com

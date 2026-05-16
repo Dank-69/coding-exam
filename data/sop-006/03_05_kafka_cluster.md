@@ -1,0 +1,3 @@
+# 场景五：Kafka集群故障
+
+Kafka集群出现Broker下线或Leader选举频繁时，首先确认ZooKeeper集群的健康状态，因为Kafka依赖ZooKeeper进行元数据管理。检查Kafka Controller日志了解Leader选举原因。如果是Broker磁盘故障导致下线，将该Broker上的Partition Leader迁移到其他Broker。如果是ISR列表缩小，检查Follower的同步延迟，可能是网络或磁盘IO瓶颈。对于数据通道类的核心Topic，确认Producer的acks设置和Partition分布是否合理。Kafka集群故障可能同时影响实时计算和离线同步，需要同步通知相关团队。

@@ -69,7 +69,8 @@
     const chatLog = document.getElementById("chatLog");
     const traceItems = document.getElementById("traceItems");
     const streamState = document.getElementById("streamState");
-    let currentEventSource = null;
+    let currentStreamController = null;
+    const conversationHistory = [];
 
     function escapeHtml(value) {
         return String(value || "")
@@ -104,49 +105,110 @@
         traceItems.innerHTML = '<p class="empty-state">正在等待工具调用。</p>';
     }
 
+    function compactHistory() {
+        return conversationHistory.slice(-8).map((item) => ({
+            role: item.role,
+            content: String(item.content || "").slice(0, 1500)
+        }));
+    }
+
+    function handleStreamEvent(type, data, botBubble, answerLines) {
+        if (type === "thinking") {
+            botBubble.textContent = data;
+            appendTrace("thinking", data);
+        } else if (type === "tool_call") {
+            appendTrace("tool_call", data);
+        } else if (type === "tool_result") {
+            appendTrace("tool_result", data);
+        } else if (type === "message") {
+            answerLines.push(data);
+            botBubble.textContent = answerLines.join("\n");
+        } else if (type === "done") {
+            appendTrace("done", data);
+            conversationHistory.push({role: "assistant", content: answerLines.join("\n")});
+            streamState.textContent = "done";
+        } else if (type === "error") {
+            appendTrace("error", data || "stream error");
+            botBubble.textContent = data || "Agent 对话失败，请重试。";
+            streamState.textContent = "error";
+        }
+    }
+
+    function consumeSseBlock(block, botBubble, answerLines) {
+        let type = "message";
+        const dataLines = [];
+        for (const line of block.split(/\r?\n/)) {
+            if (line.startsWith("event:")) {
+                type = line.slice(6).trim() || "message";
+            } else if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trimStart());
+            }
+        }
+        handleStreamEvent(type, dataLines.join("\n"), botBubble, answerLines);
+    }
+
     function startChat(message) {
         const q = (message || "").trim();
         if (!q) {
             return;
         }
-        if (currentEventSource) {
-            currentEventSource.close();
+        if (currentStreamController) {
+            currentStreamController.abort();
         }
+        const requestHistory = compactHistory();
         appendBubble("user", q);
+        conversationHistory.push({role: "user", content: q});
         resetTrace();
         streamState.textContent = "streaming";
         const answerLines = [];
 
         const botBubble = appendBubble("assistant", "正在分析问题...");
-        currentEventSource = new EventSource(`/v3/chat?message=${encodeURIComponent(q)}`);
+        const controller = new AbortController();
+        currentStreamController = controller;
 
-        currentEventSource.addEventListener("thinking", (event) => {
-            botBubble.textContent = event.data;
-            appendTrace("thinking", event.data);
-        });
-        currentEventSource.addEventListener("tool_call", (event) => {
-            appendTrace("tool_call", event.data);
-        });
-        currentEventSource.addEventListener("tool_result", (event) => {
-            appendTrace("tool_result", event.data);
-        });
-        currentEventSource.addEventListener("message", (event) => {
-            answerLines.push(event.data);
-            botBubble.textContent = answerLines.join("\n");
-        });
-        currentEventSource.addEventListener("done", (event) => {
-            appendTrace("done", event.data);
-            streamState.textContent = "done";
-            currentEventSource.close();
-            currentEventSource = null;
-        });
-        currentEventSource.addEventListener("error", (event) => {
-            appendTrace("error", event.data || "stream error");
-            botBubble.textContent = event.data || "Agent 对话失败，请重试。";
+        fetch("/v3/chat/stream", {
+            method: "POST",
+            headers: {
+                "Accept": "text/event-stream",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({message: q, history: requestHistory}),
+            signal: controller.signal
+        }).then(async (response) => {
+            if (!response.ok || !response.body) {
+                throw new Error(`stream request failed: ${response.status}`);
+            }
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            while (true) {
+                const {value, done} = await reader.read();
+                if (done) {
+                    break;
+                }
+                buffer += decoder.decode(value, {stream: true});
+                const blocks = buffer.split(/\r?\n\r?\n/);
+                buffer = blocks.pop() || "";
+                for (const block of blocks) {
+                    if (block.trim()) {
+                        consumeSseBlock(block, botBubble, answerLines);
+                    }
+                }
+            }
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+                consumeSseBlock(buffer, botBubble, answerLines);
+            }
+        }).catch((error) => {
+            if (error.name === "AbortError") {
+                return;
+            }
+            appendTrace("error", error.message || "stream error");
+            botBubble.textContent = error.message || "Agent 对话失败，请重试。";
             streamState.textContent = "error";
-            if (currentEventSource) {
-                currentEventSource.close();
-                currentEventSource = null;
+        }).finally(() => {
+            if (currentStreamController === controller) {
+                currentStreamController = null;
             }
         });
     }

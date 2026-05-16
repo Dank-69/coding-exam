@@ -34,6 +34,10 @@ public class VectorWarmupRunner implements ApplicationRunner {
             log.info("v2 vector warm-up skipped: no documents loaded");
             return;
         }
+        if (!semanticSearchService.canWarmUpVectors()) {
+            log.info("v2 vector warm-up skipped: {}", semanticSearchService.vectorWarmUpDisabledReason());
+            return;
+        }
 
         log.info("v2 vector warm-up begin docs={} mode=startup-sequential", documents.size());
         long start = System.currentTimeMillis();

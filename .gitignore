@@ -3,3 +3,5 @@ target/
 .idea/
 *.iml
 .claude/
+data-cache/
+data/*.index.json

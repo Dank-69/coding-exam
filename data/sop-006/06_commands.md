@@ -1,0 +1,3 @@
+# 六、工具与命令参考
+
+数据平台运维工具：集群管理使用Ambari或Cloudera Manager。任务调度使用Apache DolphinScheduler，支持DAG可视化和任务依赖管理。数据质量使用Apache Griffin进行数据质量检测。Flink管理通过Flink Dashboard和自研的Flink运维平台。Kafka管理使用Kafka Manager和Confluent Control Center。HDFS管理使用NameNode Web UI和hdfs dfsadmin命令。数据探查使用Jupyter Notebook和Zeppelin。元数据管理使用Apache Atlas进行数据血缘追踪。 本文档由数据平台团队维护，如有疑问请联系：data-oncall@company.com

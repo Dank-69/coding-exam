@@ -1,0 +1,3 @@
+# 六、工具与命令参考
+
+SRE常用工具：Kubernetes管理使用kubectl和k9s终端UI工具。基础设施编排使用Terraform和Pulumi。配置管理使用Ansible。监控使用Prometheus加Grafana加Thanos技术栈。日志使用ELK或Loki技术栈。告警使用AlertManager和PagerDuty。混沌工程使用ChaosMesh进行故障注入测试。集群诊断使用kubeadm和etcdctl。成本管理使用Kubecost分析资源使用效率。 本文档由SRE团队维护，如有疑问请联系：sre-oncall@company.com
